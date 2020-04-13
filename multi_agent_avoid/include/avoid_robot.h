@@ -54,7 +54,7 @@ namespace robot{
          msg.angular.z = 0.0; 
 
          avoid(&msg);
-         ROS_INFO("Robot linear vel = %.2f, angular vel = %.2f", msg.linear.x, msg.angular.z);
+         ROS_DEBUG("Robot linear vel = %.2f, angular vel = %.2f", msg.linear.x, msg.angular.z);
 
          this->movement_pub_.publish(msg);
       }
@@ -131,7 +131,7 @@ namespace robot{
             tf::getYaw(robot_pose.orientation)
          );
 
-         ROS_INFO("Robot Pose: [%.2f; %.2f; %.2f]", 
+         ROS_DEBUG("Robot Pose: [%.2f; %.2f; %.2f]", 
             navigation_.getX(), navigation_.getY(), navigation_.getTheta()
          );
       }    
