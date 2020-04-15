@@ -29,7 +29,7 @@ namespace robot{
 
       const float obs_front_start = 1.5;
       const float obs_front_full = 0.8;
-      const float obs_side_start = 0.7;
+      const float obs_side_start = 1.2;
       const float obs_side_full = 0.4;
       
 
@@ -54,7 +54,7 @@ namespace robot{
          msg.angular.z = 0.0; 
 
          avoid(&msg);
-         ROS_DEBUG("Robot linear vel = %.2f, angular vel = %.2f", msg.linear.x, msg.angular.z);
+         ROS_INFO("Robot linear vel = %.2f, angular vel = %.2f", msg.linear.x, msg.angular.z);
 
          this->movement_pub_.publish(msg);
       }
@@ -64,63 +64,90 @@ namespace robot{
    private:
       void avoid(geometry_msgs::Twist* msg)
       {
+         const double frontside_start = 1.2;
+         const double frontside_full = 0.4;
+         const double side_start = 0.4;
+         const double side_full = 0.1;
+         const double linear_start = 1.2;
+         const double linear_full = 0.4;
+         
          //Obstacle avoidans logic
-         msg->linear.x = fuzzy::FuzzyFunctions::NOT(obstacle());
-         msg->angular.z -= obstacleLeftSide(obs_side_start, obs_side_full);
-         msg->angular.z -= obstacleFrontLeft(obs_front_start, obs_front_full);
-         msg->angular.z += obstacleFrontRight(obs_front_start, obs_front_full);
-         msg->angular.z += obstacleRightSide(obs_side_start, obs_side_full);
+         msg->linear.x = 0.5 * fuzzy::FuzzyFunctions::NOT(obstacle(linear_start, linear_full));
 
-         ROS_DEBUG("Obstacle:%.2f LeftSide:%.2f FrontLeft:%.2f FrontRight:%.2f RightSide:%.2f",
-                  obstacle(),
-                  obstacleLeftSide(obs_side_start, obs_side_full),
-                  obstacleFrontLeft(obs_front_start, obs_front_full),
-                  obstacleFrontRight(obs_front_start, obs_front_full),
-                  obstacleRightSide(obs_side_start, obs_side_full));
-      }
+         double obs_left = obstacleFrontLeftSide(frontside_start, frontside_full) 
+            + obstacleLeftSide(side_start, side_full);
+         double obs_right = obstacleFrontRightSide(frontside_start, frontside_full)
+            + obstacleRightSide(side_start, side_full);
 
-      double obstacleLeftSide(double slowDownThreshold, double stopThreshold)
-      {
-         return fuzzy_.rampUp(
-            laserscan_.regionDistance(M_PI / 2.0, M_PI / 18.0), 
-            slowDownThreshold, stopThreshold
+         if(obs_left > obs_right)
+         {
+            msg->angular.z = -fuzzy::FuzzyFunctions::OR(
+               obstacleFrontLeftSide(frontside_start, frontside_full),
+               obstacleLeftSide(side_start, side_full)
+            );
+         }
+         else
+         {
+            msg->angular.z = fuzzy::FuzzyFunctions::OR(
+               obstacleFrontRightSide(frontside_start, frontside_full),
+               obstacleRightSide(side_start, side_full)
+            );
+         }
+         
+         ROS_INFO("Obstacle:%.2f LeftSide:%.2f FrontLeftSide:%.2f FrontRightSide:%.2f RightSide:%.2f",
+                  obstacle(linear_start, linear_full),
+                  obstacleLeftSide(side_start, side_full),
+                  obstacleFrontLeftSide(frontside_start, frontside_full),
+                  obstacleFrontRightSide(frontside_start, frontside_full),
+                  obstacleRightSide(side_start, side_full)
          );
       }
 
-      double obstacleFrontLeft(double slowDownThreshold, double stopThreshold)
+      double obstacleFrontLeftSide(double slowdown_threshold, double stop_threshold)
       {
          return fuzzy_.rampUp(
-            laserscan_.regionDistance(3.0 * M_PI / 36.0, M_PI / 36.0), 
-            slowDownThreshold, stopThreshold
+            laserscan_.regionDistance(degreesToRadians(0.0), degreesToRadians(10.0)), 
+            slowdown_threshold, stop_threshold
          );
       }
 
-      double obstacleFrontRight(double slowDownThreshold, double stopThreshold)
+      double obstacleLeftSide(double slowdown_threshold, double stop_threshold)
       {
          return fuzzy_.rampUp(
-            laserscan_.regionDistance(-M_PI / 36.0, -3.0 * M_PI / 36.0),
-            slowDownThreshold, stopThreshold
+            laserscan_.regionDistance(degreesToRadians(10.0), degreesToRadians(90.0)), 
+            slowdown_threshold, stop_threshold
          );
       }
 
-      double obstacleRightSide(double slowDownThreshold, double stopThreshold)
+      double obstacleFrontRightSide(double slowdown_threshold, double stop_threshold)
       {
          return fuzzy_.rampUp(
-            laserscan_.regionDistance(-M_PI / 18.0, -M_PI / 2.0), 
-            slowDownThreshold, stopThreshold
+            laserscan_.regionDistance(degreesToRadians(350.0), degreesToRadians(359.0)), 
+            slowdown_threshold, stop_threshold
          );
       }
 
-      double obstacle()
+      double obstacleRightSide(double slowdown_threshold, double stop_threshold)
       {
-         return fuzzy::FuzzyFunctions::OR(
-            obstacleLeftSide(obs_side_start, obs_side_full),
+         return fuzzy_.rampUp(
+            laserscan_.regionDistance(degreesToRadians(270.0), degreesToRadians(350.0)), 
+            slowdown_threshold, stop_threshold
+         );
+      }
+
+      double obstacle(double slowdown_threshold, double stop_threshold)
+      {
+         return fuzzy::FuzzyFunctions::OR3(
+            obstacleFrontLeftSide(slowdown_threshold, stop_threshold),
+            obstacleFrontRightSide(slowdown_threshold, stop_threshold),
             fuzzy::FuzzyFunctions::OR(
-               obstacleRightSide(obs_side_start, obs_side_full),
-               fuzzy::FuzzyFunctions::OR(
-                     obstacleFrontLeft(obs_front_start, obs_front_full),
-                     obstacleFrontRight(obs_front_start, obs_front_full))));
+               obstacleLeftSide(0.25*slowdown_threshold, 0.25*stop_threshold),
+               obstacleRightSide(0.25*slowdown_threshold, 0.25*stop_threshold)
+            )
+         );
       }  
+
+      double degreesToRadians(double degree){ return (degree * M_PI) / 180.0; }
 
       void odomCallback(const nav_msgs::Odometry::ConstPtr& msg) 
       {

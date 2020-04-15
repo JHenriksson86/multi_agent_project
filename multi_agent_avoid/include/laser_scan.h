@@ -2,8 +2,8 @@
 #define LASER_SCAN_H
 
 #include <string>
+#include <iostream>
 #include <vector>
-#include "ros/ros.h"
 
 
 namespace laserscan

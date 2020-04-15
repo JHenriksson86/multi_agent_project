@@ -37,6 +37,14 @@ namespace fuzzy {
       return std::fmin(x, y);
     }
 
+    static double OR3(double x, double y, double z){
+      return OR(x, OR(y, z));
+    }
+
+    static double AND3(double x, double y, double z){
+      return AND(x, AND(y, z));
+    }
+
     static double NOT(double x){
       return 1.0 - x;
     }
