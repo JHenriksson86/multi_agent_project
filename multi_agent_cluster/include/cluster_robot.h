@@ -5,11 +5,14 @@
 #include <vector>
 #include <cmath>
 #include <random>
+#include <string>
+#include "eigen3/Eigen/Dense"
 #include "ros/ros.h"
 #include "sensor_msgs/LaserScan.h"
 #include "geometry_msgs/Twist.h"
 #include "nav_msgs/Odometry.h"
 #include "tf/transform_datatypes.h"
+#include <visualization_msgs/Marker.h>
 #include "navigation.h"
 #include "fuzzy.h"
 #include "laser_scan.h"
@@ -26,11 +29,13 @@ namespace robot{
       ros::Subscriber top_scan_sub_;
       ros::Subscriber bottom_scan_sub_;
       ros::Publisher movement_pub_;
+      ros::Publisher marker_pub_;
 
       fuzzy::FuzzyFunctions fuzzy_;
       Navigation navigation_;
       LaserScan top_scan_;
       LaserScan bottom_scan_;
+      LaserScan object_candidates_;
 
       RandomWalkState random_state_;
       double random_turn_;
@@ -53,6 +58,8 @@ namespace robot{
          ROS_DEBUG_STREAM("AvoidRobot: Subscribing to bottom scan topic: " << bottom_scan_topic);
          this->bottom_scan_sub_ = nh_->subscribe(bottom_scan_topic, 100, &ClusterRobot::bottomScanCallback, this);
 
+         this->marker_pub_ = nh_->advertise<visualization_msgs::Marker>("marker", 100);
+
          random_state_ = RandomWalkState::inactive;
          random_turn_ = 0.0;
       }
@@ -64,8 +71,9 @@ namespace robot{
          msg.angular.z = 0.0; 
 
          avoid(&msg);
-         ROS_INFO("Robot linear vel = %.2f, angular vel = %.2f", msg.linear.x, msg.angular.z);
+         ROS_DEBUG("Robot linear vel = %.2f, angular vel = %.2f", msg.linear.x, msg.angular.z);
 
+         findClosestObject();
          this->movement_pub_.publish(msg);
       }
 
@@ -151,13 +159,48 @@ namespace robot{
             );
          }
          
-         ROS_INFO("Obstacle:%.2f LeftSide:%.2f FrontLeftSide:%.2f FrontRightSide:%.2f RightSide:%.2f",
+         ROS_DEBUG("Obstacle:%.2f LeftSide:%.2f FrontLeftSide:%.2f FrontRightSide:%.2f RightSide:%.2f",
                   obstacle(linear_start, linear_full),
                   obstacleLeftSide(side_start, side_full),
                   obstacleFrontLeftSide(frontside_start, frontside_full),
                   obstacleFrontRightSide(frontside_start, frontside_full),
                   obstacleRightSide(side_start, side_full)
          );
+      }
+
+      int findClosestObject()
+      {
+         double distance = 1.0;
+         int closest_object = -1;
+         if(object_candidates_.empty())
+            return -1;
+
+         for(int i = 0; i < object_candidates_.size(); i++)
+         {
+            LaserScanPoint candidate(object_candidates_[i]);
+            int close_objects = 0;
+            for(int j = 0; j < object_candidates_.size(); j++)
+            {
+               if(i != j)
+               {
+                  if(candidate.getDistance(object_candidates_[j]) < 0.2)
+                     close_objects++;
+               }
+            }
+            if(close_objects > 2)
+            {
+               if(candidate.getDistance() < distance)
+               {
+                  distance = candidate.getDistance();
+                  closest_object = i;
+               }
+            }
+         }
+
+         if(closest_object == -1)
+            ROS_INFO_STREAM("findClosestObject: No close object found");
+         else
+            ROS_ERROR_STREAM("findClosestObject: Object found at distance = " << distance);
       }
 
       double obstacleFrontLeftSide(double slowdown_threshold, double stop_threshold)
@@ -179,7 +222,7 @@ namespace robot{
       double obstacleFrontRightSide(double slowdown_threshold, double stop_threshold)
       {
          return fuzzy_.rampUp(
-            top_scan_.regionDistance(degreesToRadians(350.0), degreesToRadians(359.0)), 
+            top_scan_.regionDistance(degreesToRadians(350.0), degreesToRadians(360.0)), 
             slowdown_threshold, stop_threshold
          );
       }
@@ -225,6 +268,56 @@ namespace robot{
 
       double degreesToRadians(double degree){ return (degree * M_PI) / 180.0; }
 
+      void publishMarker(const LaserScan& scan)
+      {
+         visualization_msgs::Marker marker = createMarker();
+         for(int i = 0; i < scan.size(); i++) 
+         {
+            if(scan[i].getDistance() > 0.0)
+            {
+                  geometry_msgs::Point point;
+                  point.x = scan[i].getX();
+                  point.y = scan[i].getY();
+                  point.z = 0.0;
+                  marker.points.push_back(point);
+            }
+         } 
+         marker_pub_.publish(marker);
+      }
+
+      visualization_msgs::Marker createMarker() 
+      {
+         visualization_msgs::Marker marker;
+         
+         std::string frame_id = nh_->getNamespace() + "/base_footprint";
+         frame_id.erase(0,1);
+         marker.header.frame_id = frame_id;
+         marker.header.stamp = ros::Time();
+         marker.ns = nh_->getNamespace();
+         marker.type = visualization_msgs::Marker::POINTS;
+         marker.action = visualization_msgs::Marker::ADD;
+         
+         marker.pose.position.x = 0.0;
+         marker.pose.position.y = 0.0;
+         marker.pose.position.z = 0.0;
+         
+         marker.pose.orientation.x = 0.0;
+         marker.pose.orientation.y = 0.0;
+         marker.pose.orientation.z = 0.0;
+         marker.pose.orientation.w = 1.0;
+         
+         marker.scale.x = 0.05;
+         marker.scale.y = 0.05;
+         marker.scale.z = 0.05;
+
+         marker.color.a = 1.0; // Don't forget to set the alpha!
+         marker.color.r = 1.0;
+         marker.color.g = 1.0;
+         marker.color.b = 1.0;
+         
+         return marker;
+      }
+
       void odomCallback(const nav_msgs::Odometry::ConstPtr& msg) 
       {
          geometry_msgs::Pose robot_pose = msg->pose.pose;
@@ -248,6 +341,9 @@ namespace robot{
          );
 
          top_scan_.updateLaserscan(msg);
+
+         object_candidates_ = bottom_scan_.subtractLaserScan(top_scan_);
+         publishMarker(object_candidates_);
       }
 
       void bottomScanCallback(const sensor_msgs::LaserScan::ConstPtr &msg)
@@ -260,6 +356,8 @@ namespace robot{
 
          bottom_scan_.updateLaserscan(msg);
       }
+
+      
    };
 
 } // namespace robot
