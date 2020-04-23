@@ -12,7 +12,7 @@
 		</include>
 
 		<!-- World physics -->
-		<physics type="ode">
+      <physics type="ode">
 			<real_time_update_rate>1000.0</real_time_update_rate>
 			<max_step_size>0.001</max_step_size>
 			<real_time_factor>1</real_time_factor>
@@ -117,7 +117,7 @@
 			<static>1</static>
 		</model>
 
-		<!-- Objects -->
+	<!-- Objects -->
     <population name="box_population1">
       <model name="box">
         <pose>0 0 0.1 0 0 0</pose>
@@ -131,27 +131,35 @@
               <izz>0.083</izz>
             </inertia>
           </inertial>
-          <collision name="collision">
+		  
+         <collision name="collision">
             <geometry>
-              <box>
-                <size>0.05 0.05 0.1</size>
-              </box>
+               <box>
+                  <size>0.05 0.05 0.1</size>
+               </box>
             </geometry>
-          </collision>
-          <visual name="visual">
+            <surface>
+               <friction>
+                  <ode>
+                     <mu>0.01</mu>
+                  </ode>
+               </friction>
+            </surface>
+         </collision>
+         <visual name="visual">
             <geometry>
-              <box>
-                <size>0.05 0.05 0.1</size>
-              </box>
+               <box>
+                  <size>0.05 0.05 0.1</size>
+               </box>
             </geometry>
-          </visual>
+         </visual>
         </link>
       </model>
       <pose>0 0 0 0 0 0</pose>
       <box>
         <size>4.5 4.5 0.01</size>
       </box>
-      <model_count>30</model_count>
+      <model_count>100</model_count>
       <distribution>
         <type>random</type>
       </distribution>

@@ -24,8 +24,8 @@ namespace robot{
       ros::Publisher movement_pub_;
 
       fuzzy::FuzzyFunctions fuzzy_;
-      navigation::Navigation navigation_;
-      laserscan::LaserScan laserscan_;
+      Navigation navigation_;
+      LaserScan laserscan_;
 
       const float obs_front_start = 1.5;
       const float obs_front_full = 0.8;

@@ -63,7 +63,7 @@ namespace robot{
          msg.linear.x = 0.0;
          msg.angular.z = 0.0; 
 
-         randomWalk(&msg);
+         avoid(&msg);
          ROS_INFO("Robot linear vel = %.2f, angular vel = %.2f", msg.linear.x, msg.angular.z);
 
          this->movement_pub_.publish(msg);
@@ -117,10 +117,92 @@ namespace robot{
                }
             break;
          }
-
-         
-         
       }
+
+      void avoid(geometry_msgs::Twist* msg)
+      {
+         const double frontside_start = 1.2;
+         const double frontside_full = 0.4;
+         const double side_start = 0.4;
+         const double side_full = 0.1;
+         const double linear_start = 1.2;
+         const double linear_full = 0.4;
+         
+         //Obstacle avoidans logic
+         msg->linear.x = 0.5 * fuzzy::FuzzyFunctions::NOT(obstacle(linear_start, linear_full));
+
+         double obs_left = obstacleFrontLeftSide(frontside_start, frontside_full) 
+            + obstacleLeftSide(side_start, side_full);
+         double obs_right = obstacleFrontRightSide(frontside_start, frontside_full)
+            + obstacleRightSide(side_start, side_full);
+
+         if(obs_left > obs_right)
+         {
+            msg->angular.z = -fuzzy::FuzzyFunctions::OR(
+               obstacleFrontLeftSide(frontside_start, frontside_full),
+               obstacleLeftSide(side_start, side_full)
+            );
+         }
+         else
+         {
+            msg->angular.z = fuzzy::FuzzyFunctions::OR(
+               obstacleFrontRightSide(frontside_start, frontside_full),
+               obstacleRightSide(side_start, side_full)
+            );
+         }
+         
+         ROS_INFO("Obstacle:%.2f LeftSide:%.2f FrontLeftSide:%.2f FrontRightSide:%.2f RightSide:%.2f",
+                  obstacle(linear_start, linear_full),
+                  obstacleLeftSide(side_start, side_full),
+                  obstacleFrontLeftSide(frontside_start, frontside_full),
+                  obstacleFrontRightSide(frontside_start, frontside_full),
+                  obstacleRightSide(side_start, side_full)
+         );
+      }
+
+      double obstacleFrontLeftSide(double slowdown_threshold, double stop_threshold)
+      {
+         return fuzzy_.rampUp(
+            top_scan_.regionDistance(degreesToRadians(0.0), degreesToRadians(10.0)), 
+            slowdown_threshold, stop_threshold
+         );
+      }
+
+      double obstacleLeftSide(double slowdown_threshold, double stop_threshold)
+      {
+         return fuzzy_.rampUp(
+            top_scan_.regionDistance(degreesToRadians(10.0), degreesToRadians(90.0)), 
+            slowdown_threshold, stop_threshold
+         );
+      }
+
+      double obstacleFrontRightSide(double slowdown_threshold, double stop_threshold)
+      {
+         return fuzzy_.rampUp(
+            top_scan_.regionDistance(degreesToRadians(350.0), degreesToRadians(359.0)), 
+            slowdown_threshold, stop_threshold
+         );
+      }
+
+      double obstacleRightSide(double slowdown_threshold, double stop_threshold)
+      {
+         return fuzzy_.rampUp(
+            top_scan_.regionDistance(degreesToRadians(270.0), degreesToRadians(350.0)), 
+            slowdown_threshold, stop_threshold
+         );
+      }
+
+      double obstacle(double slowdown_threshold, double stop_threshold)
+      {
+         return fuzzy::FuzzyFunctions::OR3(
+            obstacleFrontLeftSide(slowdown_threshold, stop_threshold),
+            obstacleFrontRightSide(slowdown_threshold, stop_threshold),
+            fuzzy::FuzzyFunctions::OR(
+               obstacleLeftSide(0.25*slowdown_threshold, 0.25*stop_threshold),
+               obstacleRightSide(0.25*slowdown_threshold, 0.25*stop_threshold)
+            )
+         );
+      }  
 
       double positionLeft(double angle, double slowDownThreshold, double stopThreshold){
          return fuzzy_.rampDown(angle, slowDownThreshold, stopThreshold);

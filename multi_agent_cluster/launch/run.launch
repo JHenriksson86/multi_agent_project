@@ -17,7 +17,7 @@
   <arg name="r1_x" default="1.0"/>
   <arg name="r1_y" default="0.0"/>
   <arg name="r1_z" default="0.0"/>
-  <arg name="r1_yaw" default="0.0"/>
+  <arg name="r1_yaw" default="0.01"/>
 
   <group ns = "$(arg r1)">
     <param name="robot_description" command="$(arg robot_model)"/>
@@ -37,6 +37,89 @@
       <param name="bottom_scan_topic" type="string" value="/$(arg r1)/bottom_scan" />
     </node>
 
+  </group>
+
+  <!-- Robot 2 -->
+  <arg name="r2"  default="robot2"/>
+  <arg name="r2_x" default="-1.0"/>
+  <arg name="r2_y" default="0.0"/>
+  <arg name="r2_z" default="0.0"/>
+  <arg name="r2_yaw" default="3.15"/>
+
+  <group ns = "$(arg r2)">
+    <param name="robot_description" command="$(arg robot_model)"/>
+
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
+      <param name="publish_frequency" type="double" value="50.0" />
+      <param name="tf_prefix" value="$(arg r2)" />
+    </node>
+    
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" 
+	  args="-urdf -model $(arg r2) -x $(arg r2_x) -y $(arg r2_y) -z $(arg r2_z) -Y $(arg r2_yaw) -param robot_description" />
+    
+    <node name="multi_agent_cluster_node" pkg="multi_agent_cluster" type="multi_agent_cluster_node" output="screen">
+      <param name="odometry_topic" type="string" value="/$(arg r2)/odom" />
+      <param name="movement_topic" type="string" value="/$(arg r2)/cmd_vel" />
+      <param name="top_scan_topic" type="string" value="/$(arg r2)/top_scan" />
+      <param name="bottom_scan_topic" type="string" value="/$(arg r2)/bottom_scan" />
+    </node>
+
+  </group>
+
+  <!-- Robot 3 -->
+  <arg name="r3"  default="robot3"/>
+  <arg name="r3_x" default="0.0"/>
+  <arg name="r3_y" default="1.0"/>
+  <arg name="r3_z" default="0.0"/>
+  <arg name="r3_yaw" default="1.58"/>
+
+  <group ns = "$(arg r3)">
+    <?ignore
+    <param name="robot_description" command="$(arg robot_model)"/>
+
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
+      <param name="publish_frequency" type="double" value="50.0" />
+      <param name="tf_prefix" value="$(arg r3)" />
+    </node>
+    
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" 
+	  args="-urdf -model $(arg r3) -x $(arg r3_x) -y $(arg r3_y) -z $(arg r3_z) -Y $(arg r3_yaw) -param robot_description" />
+    
+    <node name="multi_agent_cluster_node" pkg="multi_agent_cluster" type="multi_agent_cluster_node" output="screen">
+      <param name="odometry_topic" type="string" value="/$(arg r3)/odom" />
+      <param name="movement_topic" type="string" value="/$(arg r3)/cmd_vel" />
+      <param name="top_scan_topic" type="string" value="/$(arg r3)/top_scan" />
+      <param name="bottom_scan_topic" type="string" value="/$(arg r3)/bottom_scan" />
+    </node>
+    ?>
+  </group>
+
+  <!-- Robot 4 -->
+  <arg name="r4"  default="robot4"/>
+  <arg name="r4_x" default="0.0"/>
+  <arg name="r4_y" default="-1.0"/>
+  <arg name="r4_z" default="0.0"/>
+  <arg name="r4_yaw" default="4.74"/>
+
+  <group ns = "$(arg r4)">
+    <?ignore
+    <param name="robot_description" command="$(arg robot_model)"/>
+
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
+      <param name="publish_frequency" type="double" value="50.0" />
+      <param name="tf_prefix" value="$(arg r4)" />
+    </node>
+    
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" 
+	  args="-urdf -model $(arg r4) -x $(arg r4_x) -y $(arg r4_y) -z $(arg r4_z) -Y $(arg r4_yaw) -param robot_description" />
+    
+    <node name="multi_agent_cluster_node" pkg="multi_agent_cluster" type="multi_agent_cluster_node" output="screen">
+      <param name="odometry_topic" type="string" value="/$(arg r4)/odom" />
+      <param name="movement_topic" type="string" value="/$(arg r4)/cmd_vel" />
+      <param name="top_scan_topic" type="string" value="/$(arg r4)/top_scan" />
+      <param name="bottom_scan_topic" type="string" value="/$(arg r4)/bottom_scan" />
+    </node>
+    ?>
   </group>
 
 </launch>

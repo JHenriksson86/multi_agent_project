@@ -6,8 +6,7 @@
 #include <vector>
 
 
-namespace laserscan
-{
+namespace robot{
 
 class LaserScan
 {

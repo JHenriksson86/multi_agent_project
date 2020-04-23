@@ -3,7 +3,7 @@
 
 #include <cmath>
 
-namespace navigation{
+namespace robot{
 
    class Pose
    {
@@ -68,6 +68,10 @@ namespace navigation{
 
       double getTheta() const { return pose_.getTheta(); }
 
+      double getThetaSum(double angle) const { return addAngles(pose_.getTheta(), angle); }
+
+      double getThetaDiff(double angle) const { return subtractAngles(pose_.getTheta(), angle); }
+
       double getDistanceToCoordinate(double x, double y) const 
       {
          double robotX = x - this->pose_.getX();
@@ -89,6 +93,17 @@ namespace navigation{
       double subtractAngles(double angle1, double angle2) const 
       {
          double angle = angle1 - angle2;
+         
+         if(angle > M_PI)
+            return angle - 2.0 * M_PI;
+         else if(angle < -M_PI)
+            return angle + 2.0 * M_PI;
+         return angle;
+      }
+
+      double addAngles(double angle1, double angle2) const 
+      {
+         double angle = angle1 + angle2;
          
          if(angle > M_PI)
             return angle - 2.0 * M_PI;
