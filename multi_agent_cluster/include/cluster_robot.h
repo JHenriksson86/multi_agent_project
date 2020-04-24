@@ -13,12 +13,15 @@
 #include "nav_msgs/Odometry.h"
 #include "tf/transform_datatypes.h"
 #include <visualization_msgs/Marker.h>
+#include "utility.h"
 #include "navigation.h"
 #include "fuzzy.h"
 #include "laser_scan.h"
 
 namespace robot{
    enum class RandomWalkState { inactive, active };
+
+   enum class ClusteringState { Searching, Goto, Clustering, Reversing, Turning };
 
    class ClusterRobot
    {
@@ -29,9 +32,7 @@ namespace robot{
       ros::Subscriber top_scan_sub_;
       ros::Subscriber bottom_scan_sub_;
       ros::Publisher movement_pub_;
-      ros::Publisher marker_pub_;
 
-      fuzzy::FuzzyFunctions fuzzy_;
       Navigation navigation_;
       LaserScan top_scan_;
       LaserScan bottom_scan_;
@@ -39,6 +40,11 @@ namespace robot{
 
       RandomWalkState random_state_;
       double random_turn_;
+
+      ClusteringState cluster_state_;
+      double turn_theta_;
+      
+      std::string robot_ns_;
 
    public:
       ClusterRobot(ros::NodeHandle* node_handle, std::string odom_topic,
@@ -58,10 +64,13 @@ namespace robot{
          ROS_DEBUG_STREAM("AvoidRobot: Subscribing to bottom scan topic: " << bottom_scan_topic);
          this->bottom_scan_sub_ = nh_->subscribe(bottom_scan_topic, 100, &ClusterRobot::bottomScanCallback, this);
 
-         this->marker_pub_ = nh_->advertise<visualization_msgs::Marker>("marker", 100);
-
          random_state_ = RandomWalkState::inactive;
          random_turn_ = 0.0;
+
+         cluster_state_ = ClusteringState::Searching;
+         turn_theta_ = 0.0;
+
+         robot_ns_ = node_handle->getNamespace();
       }
 
       void run()
@@ -70,16 +79,84 @@ namespace robot{
          msg.linear.x = 0.0;
          msg.angular.z = 0.0; 
 
-         avoid(&msg);
-         ROS_DEBUG("Robot linear vel = %.2f, angular vel = %.2f", msg.linear.x, msg.angular.z);
+         clustering(&msg);
+         ROS_INFO("%s: Robot linear vel = %.2f, angular vel = %.2f", robot_ns_.c_str(), msg.linear.x, msg.angular.z);
 
-         findClosestObject();
          this->movement_pub_.publish(msg);
       }
 
       bool ok() { return nh_->ok(); }
 
    private:
+      void clustering(geometry_msgs::Twist* msg)
+      {
+         int closest = findClosestObject();
+         switch(cluster_state_)
+         {
+            case ClusteringState::Searching:
+            ROS_INFO("%s: ClusteringState::Searching", robot_ns_.c_str());
+            if(closest == -1)
+            {
+               Avoidance::avoid(top_scan_, msg);
+            }
+            else
+            {
+               cluster_state_ = ClusteringState::Goto;
+            }
+            break;
+            case ClusteringState::Goto:
+            
+            if(closest != -1)
+            {
+               Eigen::Vector2d world_cordinates = 
+               navigation_.convertToWorldCoordinate(object_candidates_[closest].getCartesianCoordinates());
+               ROS_INFO("%s: ClusteringState::Goto at coordinates x = %.2f, y = %.2f", 
+                  robot_ns_.c_str(), world_cordinates[0], world_cordinates[1]);
+               
+               Goto::gotoAvoid(navigation_, top_scan_, msg, 
+                  world_cordinates[0], world_cordinates[1]);
+
+               if(navigation_.getDistanceToCoordinate(world_cordinates[0], world_cordinates[1]) < 0.15)
+               {
+                  cluster_state_ = ClusteringState::Clustering;
+               }
+            }
+            
+            else
+            {
+               cluster_state_ = ClusteringState::Searching;
+            }
+            break;
+            case ClusteringState::Clustering:
+            ROS_INFO("%s: ClusteringState::Clustering", robot_ns_.c_str());
+               Goto::gotoAvoid(navigation_, top_scan_, msg, 0.0, 0.0);
+               if(navigation_.getDistanceToCoordinate(0.0, 0.0) < 0.20)
+               {
+                  cluster_state_ = ClusteringState::Reversing;
+               }
+            break;
+            case ClusteringState::Reversing:
+            ROS_INFO("%s: ClusteringState::Reversing", robot_ns_.c_str());
+               msg->linear.x = -0.5;
+               msg->angular.z = 0.0;
+               if(navigation_.getDistanceToCoordinate(0.0, 0.0) > 1.5)
+               {
+                  cluster_state_ = ClusteringState::Turning;
+                  turn_theta_ = navigation_.getThetaSum(M_PI/2.0);
+               }
+            break;
+            case ClusteringState::Turning:
+            ROS_INFO("%s: ClusteringState::Turning", robot_ns_.c_str());
+               msg->linear.x = 0.0;
+               msg->angular.z = 1.0;
+               if(std::fabs(navigation_.getThetaDiff(turn_theta_)) < 0.1)
+               {
+                  cluster_state_ = ClusteringState::Searching;
+               }
+            break;
+         }
+      }
+
       void randomWalk(geometry_msgs::Twist* msg)
       {
          double obstacle_left = top_scan_.regionDistance(degreesToRadians(0.0), degreesToRadians(60.0));
@@ -114,10 +191,10 @@ namespace robot{
                ROS_INFO("RandomWalk: random avoid turn angle difference = %.2f", angle_difference);
 
                msg->angular.z += 
-                  positionLeft(angle_difference, degreesToRadians(20.0), degreesToRadians(1.0));
+                  Goto::positionLeft(angle_difference, degreesToRadians(20.0), degreesToRadians(1.0));
 
                msg->angular.z -= 
-                  positionRight(angle_difference, -degreesToRadians(20.0), -degreesToRadians(1.0));
+                  Goto::positionRight(angle_difference, -degreesToRadians(20.0), -degreesToRadians(1.0));
 
                if(std::fabs(angle_difference) < degreesToRadians(2.0))
                {
@@ -127,53 +204,13 @@ namespace robot{
          }
       }
 
-      void avoid(geometry_msgs::Twist* msg)
-      {
-         const double frontside_start = 1.2;
-         const double frontside_full = 0.4;
-         const double side_start = 0.4;
-         const double side_full = 0.1;
-         const double linear_start = 1.2;
-         const double linear_full = 0.4;
-         
-         //Obstacle avoidans logic
-         msg->linear.x = 0.5 * fuzzy::FuzzyFunctions::NOT(obstacle(linear_start, linear_full));
-
-         double obs_left = obstacleFrontLeftSide(frontside_start, frontside_full) 
-            + obstacleLeftSide(side_start, side_full);
-         double obs_right = obstacleFrontRightSide(frontside_start, frontside_full)
-            + obstacleRightSide(side_start, side_full);
-
-         if(obs_left > obs_right)
-         {
-            msg->angular.z = -fuzzy::FuzzyFunctions::OR(
-               obstacleFrontLeftSide(frontside_start, frontside_full),
-               obstacleLeftSide(side_start, side_full)
-            );
-         }
-         else
-         {
-            msg->angular.z = fuzzy::FuzzyFunctions::OR(
-               obstacleFrontRightSide(frontside_start, frontside_full),
-               obstacleRightSide(side_start, side_full)
-            );
-         }
-         
-         ROS_DEBUG("Obstacle:%.2f LeftSide:%.2f FrontLeftSide:%.2f FrontRightSide:%.2f RightSide:%.2f",
-                  obstacle(linear_start, linear_full),
-                  obstacleLeftSide(side_start, side_full),
-                  obstacleFrontLeftSide(frontside_start, frontside_full),
-                  obstacleFrontRightSide(frontside_start, frontside_full),
-                  obstacleRightSide(side_start, side_full)
-         );
-      }
-
       int findClosestObject()
       {
-         double distance = 1.0;
-         int closest_object = -1;
          if(object_candidates_.empty())
             return -1;
+         
+         double distance = 1.0;
+         int closest_object = -1;
 
          for(int i = 0; i < object_candidates_.size(); i++)
          {
@@ -197,126 +234,10 @@ namespace robot{
             }
          }
 
-         if(closest_object == -1)
-            ROS_INFO_STREAM("findClosestObject: No close object found");
-         else
-            ROS_ERROR_STREAM("findClosestObject: Object found at distance = " << distance);
+         return closest_object;
       }
 
-      double obstacleFrontLeftSide(double slowdown_threshold, double stop_threshold)
-      {
-         return fuzzy_.rampUp(
-            top_scan_.regionDistance(degreesToRadians(0.0), degreesToRadians(10.0)), 
-            slowdown_threshold, stop_threshold
-         );
-      }
-
-      double obstacleLeftSide(double slowdown_threshold, double stop_threshold)
-      {
-         return fuzzy_.rampUp(
-            top_scan_.regionDistance(degreesToRadians(10.0), degreesToRadians(90.0)), 
-            slowdown_threshold, stop_threshold
-         );
-      }
-
-      double obstacleFrontRightSide(double slowdown_threshold, double stop_threshold)
-      {
-         return fuzzy_.rampUp(
-            top_scan_.regionDistance(degreesToRadians(350.0), degreesToRadians(360.0)), 
-            slowdown_threshold, stop_threshold
-         );
-      }
-
-      double obstacleRightSide(double slowdown_threshold, double stop_threshold)
-      {
-         return fuzzy_.rampUp(
-            top_scan_.regionDistance(degreesToRadians(270.0), degreesToRadians(350.0)), 
-            slowdown_threshold, stop_threshold
-         );
-      }
-
-      double obstacle(double slowdown_threshold, double stop_threshold)
-      {
-         return fuzzy::FuzzyFunctions::OR3(
-            obstacleFrontLeftSide(slowdown_threshold, stop_threshold),
-            obstacleFrontRightSide(slowdown_threshold, stop_threshold),
-            fuzzy::FuzzyFunctions::OR(
-               obstacleLeftSide(0.25*slowdown_threshold, 0.25*stop_threshold),
-               obstacleRightSide(0.25*slowdown_threshold, 0.25*stop_threshold)
-            )
-         );
-      }  
-
-      double positionLeft(double angle, double slowDownThreshold, double stopThreshold){
-         return fuzzy_.rampDown(angle, slowDownThreshold, stopThreshold);
-      }
-
-      double positionRight(double angle, double slowDownThreshold, double stopThreshold){
-         return fuzzy_.rampUp(angle, stopThreshold, slowDownThreshold);
-      }
-
-      double positionAhead(double angle, double slowDownThreshold, double stopThreshold){
-         return fuzzy_.OR(
-            fuzzy::FuzzyFunctions::NOT(positionLeft(angle, slowDownThreshold, stopThreshold)), 
-            fuzzy::FuzzyFunctions::NOT(positionRight(angle, -slowDownThreshold, -stopThreshold))
-         );
-      }
-
-      double positionHere(double distance, double slowDownThreshold, double stopThreshold){
-         return fuzzy_.rampUp(distance, slowDownThreshold, stopThreshold);
-      }
-
-      double degreesToRadians(double degree){ return (degree * M_PI) / 180.0; }
-
-      void publishMarker(const LaserScan& scan)
-      {
-         visualization_msgs::Marker marker = createMarker();
-         for(int i = 0; i < scan.size(); i++) 
-         {
-            if(scan[i].getDistance() > 0.0)
-            {
-                  geometry_msgs::Point point;
-                  point.x = scan[i].getX();
-                  point.y = scan[i].getY();
-                  point.z = 0.0;
-                  marker.points.push_back(point);
-            }
-         } 
-         marker_pub_.publish(marker);
-      }
-
-      visualization_msgs::Marker createMarker() 
-      {
-         visualization_msgs::Marker marker;
-         
-         std::string frame_id = nh_->getNamespace() + "/base_footprint";
-         frame_id.erase(0,1);
-         marker.header.frame_id = frame_id;
-         marker.header.stamp = ros::Time();
-         marker.ns = nh_->getNamespace();
-         marker.type = visualization_msgs::Marker::POINTS;
-         marker.action = visualization_msgs::Marker::ADD;
-         
-         marker.pose.position.x = 0.0;
-         marker.pose.position.y = 0.0;
-         marker.pose.position.z = 0.0;
-         
-         marker.pose.orientation.x = 0.0;
-         marker.pose.orientation.y = 0.0;
-         marker.pose.orientation.z = 0.0;
-         marker.pose.orientation.w = 1.0;
-         
-         marker.scale.x = 0.05;
-         marker.scale.y = 0.05;
-         marker.scale.z = 0.05;
-
-         marker.color.a = 1.0; // Don't forget to set the alpha!
-         marker.color.r = 1.0;
-         marker.color.g = 1.0;
-         marker.color.b = 1.0;
-         
-         return marker;
-      }
+      
 
       void odomCallback(const nav_msgs::Odometry::ConstPtr& msg) 
       {
@@ -343,7 +264,6 @@ namespace robot{
          top_scan_.updateLaserscan(msg);
 
          object_candidates_ = bottom_scan_.subtractLaserScan(top_scan_);
-         publishMarker(object_candidates_);
       }
 
       void bottomScanCallback(const sensor_msgs::LaserScan::ConstPtr &msg)
@@ -356,8 +276,6 @@ namespace robot{
 
          bottom_scan_.updateLaserscan(msg);
       }
-
-      
    };
 
 } // namespace robot

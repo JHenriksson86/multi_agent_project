@@ -141,7 +141,7 @@
             <surface>
                <friction>
                   <ode>
-                     <mu>0.01</mu>
+                     <mu>0.1</mu>
                   </ode>
                </friction>
             </surface>
@@ -157,9 +157,9 @@
       </model>
       <pose>0 0 0 0 0 0</pose>
       <box>
-        <size>4.5 4.5 0.01</size>
+        <size>3.5 3.5 0.01</size>
       </box>
-      <model_count>1</model_count>
+      <model_count>20</model_count>
       <distribution>
         <type>random</type>
       </distribution>

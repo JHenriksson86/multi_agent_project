@@ -2,15 +2,14 @@
 #define NAVIGATION_H
 
 #include <cmath>
+#include "eigen3/Eigen/Dense"
 
 namespace robot{
 
    class Pose
    {
       private:
-      double x_;
-      double y_;
-      double theta_;
+      Eigen::Vector3d pose_;
 
       public:
       Pose(double x = 0.0, double y = 0.0, double theta = 0.0)
@@ -20,22 +19,28 @@ namespace robot{
 
       void setPose(double x, double y, double theta)
       {
-         this->x_ = x;
-         this->y_ = y;
-         this->theta_ = theta;
+         pose_[0] = x;
+         pose_[1] = y;
+         pose_[2] = theta;
       }
 
-      double getX() const { return x_; }
+      double getX() const { return pose_[0]; }
 
-      void setX(double x) { this->x_ = x; }
+      void setX(double x) { pose_[0] = x; }
 
-      double getY() const { return y_; }
+      double getY() const { return pose_[1]; }
 
-      void setY(double y) { this->y_ = y; }
+      void setY(double y) { pose_[1] = y; }
 
-      double getTheta() const { return theta_; }
+      double getTheta() const { return pose_[2]; }
 
-      void setTheta(double theta) { this->theta_ = theta; }
+      void setTheta(double theta) { pose_[2] = theta; }
+
+      Eigen::Vector3d getPoseVector() const 
+      {
+         return pose_;
+      }
+
    };
 
    class Navigation {
@@ -62,11 +67,27 @@ namespace robot{
          this->pose_.setPose(x, y, theta);
       }
 
+
       double getX() const { return pose_.getX(); }
 
       double getY() const { return pose_.getY(); }
 
       double getTheta() const { return pose_.getTheta(); }
+
+      Eigen::Vector3d getPoseVector() const
+      {
+         return pose_.getPoseVector();
+      }
+
+      Eigen::Vector2d convertToWorldCoordinate(const Eigen::Vector2d& coordinate) const
+      {
+         Eigen::Matrix2d rot_matrix;
+         rot_matrix << std::cos(pose_.getTheta()), -std::sin(pose_.getTheta()),
+            std::sin(pose_.getTheta()), std::cos(pose_.getTheta());
+         Eigen::Vector2d trans_vec(pose_.getX(), pose_.getY());
+
+         return rot_matrix * coordinate + trans_vec;
+      }
 
       double getThetaSum(double angle) const { return addAngles(pose_.getTheta(), angle); }
 
