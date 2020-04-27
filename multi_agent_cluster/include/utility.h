@@ -134,7 +134,7 @@ struct Goto
       msg->linear.x = 0.5 * FuzzyFunctions::AND(
          FuzzyFunctions::AND(
             FuzzyFunctions::NOT(positionHere(nav.getDistanceToCoordinate(x, y), 0.4, 0.12)),
-            positionAhead(nav.getAngleToCoordinate(x, y), degreesToRadians(55.0), degreesToRadians(10.0))
+            positionAhead(nav.getAngleToCoordinate(x, y), degreesToRadians(30.0), degreesToRadians(10.0))
          ),
          FuzzyFunctions::NOT(obs)
       );

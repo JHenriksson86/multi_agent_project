@@ -56,6 +56,11 @@ class LaserScanPoint
    {
       return (cart_coordinates_ - point.getCartesianCoordinates()).squaredNorm();
    }
+
+   double getDistance(const Eigen::Vector2d& point) const
+   {
+      return (cart_coordinates_ - point).squaredNorm();
+   }
    
    double getDistance() const { return polar_coordinates_[0]; }
 

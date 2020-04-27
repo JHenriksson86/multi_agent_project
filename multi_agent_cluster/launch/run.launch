@@ -2,17 +2,8 @@
 
   <arg name="robot_model" default="$(find xacro)/xacro $(find turtlebot3_description)/urdf/turtlebot3_burger_gripper.urdf.xacro"/>
 
-  <!-- Gazebo -->
-  <include file="$(find gazebo_ros)/launch/empty_world.launch">
-    <arg name="world_name" value="$(find multi_agent_avoid)/worlds/turtlebot3_stage_prime.world"/>
-    <arg name="paused" value="false"/>
-    <arg name="use_sim_time" value="true"/>
-    <arg name="gui" value="true"/>
-    <arg name="headless" value="false"/>
-    <arg name="debug" value="false"/>
-  </include>  
-
   <!-- Robot 1 -->
+  
   <arg name="r1"  default="robot1"/>
   <arg name="r1_x" default="1.0"/>
   <arg name="r1_y" default="0.0"/>
@@ -36,7 +27,6 @@
       <param name="top_scan_topic" type="string" value="/$(arg r1)/top_scan" />
       <param name="bottom_scan_topic" type="string" value="/$(arg r1)/bottom_scan" />
     </node>
-
   </group>
 
   <!-- Robot 2 -->
@@ -63,7 +53,6 @@
       <param name="top_scan_topic" type="string" value="/$(arg r2)/top_scan" />
       <param name="bottom_scan_topic" type="string" value="/$(arg r2)/bottom_scan" />
     </node>
-    
   </group>
 
   <!-- Robot 3 -->

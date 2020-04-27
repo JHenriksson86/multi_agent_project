@@ -43,6 +43,8 @@ namespace robot{
 
       ClusteringState cluster_state_;
       double turn_theta_;
+      Eigen::Vector2d object_coordinates_;
+      bool old_object_;
       
       std::string robot_ns_;
 
@@ -70,6 +72,9 @@ namespace robot{
          cluster_state_ = ClusteringState::Searching;
          turn_theta_ = 0.0;
 
+         object_coordinates_ = Eigen::Vector2d::Zero();
+         old_object_ = false;
+
          robot_ns_ = node_handle->getNamespace();
       }
 
@@ -80,7 +85,8 @@ namespace robot{
          msg.angular.z = 0.0; 
 
          clustering(&msg);
-         ROS_INFO("%s: Robot linear vel = %.2f, angular vel = %.2f", robot_ns_.c_str(), msg.linear.x, msg.angular.z);
+         ROS_DEBUG("%s: Robot linear vel = %.2f, angular vel = %.2f", 
+            robot_ns_.c_str(), msg.linear.x, msg.angular.z);
 
          this->movement_pub_.publish(msg);
       }
@@ -90,12 +96,12 @@ namespace robot{
    private:
       void clustering(geometry_msgs::Twist* msg)
       {
-         int closest = findClosestObject();
+         bool found_object = findClosestObject();
          switch(cluster_state_)
          {
             case ClusteringState::Searching:
             ROS_INFO("%s: ClusteringState::Searching", robot_ns_.c_str());
-            if(closest == -1)
+            if(!found_object)
             {
                Avoidance::avoid(top_scan_, msg);
             }
@@ -106,22 +112,19 @@ namespace robot{
             break;
             case ClusteringState::Goto:
             
-            if(closest != -1)
+            if(found_object)
             {
-               Eigen::Vector2d world_cordinates = 
-               navigation_.convertToWorldCoordinate(object_candidates_[closest].getCartesianCoordinates());
                ROS_INFO("%s: ClusteringState::Goto at coordinates x = %.2f, y = %.2f", 
-                  robot_ns_.c_str(), world_cordinates[0], world_cordinates[1]);
-               
-               Goto::gotoAvoid(navigation_, top_scan_, msg, 
-                  world_cordinates[0], world_cordinates[1]);
+                  robot_ns_.c_str(), object_coordinates_[0], object_coordinates_[1]);
 
-               if(navigation_.getDistanceToCoordinate(world_cordinates[0], world_cordinates[1]) < 0.15)
+               Goto::gotoAvoid(navigation_, top_scan_, msg, 
+                  object_coordinates_[0], object_coordinates_[1]);
+
+               if(navigation_.getDistanceToCoordinate(object_coordinates_[0], object_coordinates_[1]) < 0.15)
                {
                   cluster_state_ = ClusteringState::Clustering;
                }
             }
-            
             else
             {
                cluster_state_ = ClusteringState::Searching;
@@ -133,6 +136,10 @@ namespace robot{
                if(navigation_.getDistanceToCoordinate(0.0, 0.0) < 0.20)
                {
                   cluster_state_ = ClusteringState::Reversing;
+               }
+               if(navigation_.getDistanceToCoordinate(object_coordinates_[0], object_coordinates_[1]) > 0.25)
+               {
+                  cluster_state_ = ClusteringState::Searching;
                }
             break;
             case ClusteringState::Reversing:
@@ -204,10 +211,10 @@ namespace robot{
          }
       }
 
-      int findClosestObject()
+      bool findClosestObject()
       {
          if(object_candidates_.empty())
-            return -1;
+            return false;
          
          double distance = 1.0;
          int closest_object = -1;
@@ -230,14 +237,35 @@ namespace robot{
                {
                   distance = candidate.getDistance();
                   closest_object = i;
+                  if(old_object_)
+                  {
+                     Eigen::Vector2d new_object_coordinates = getObjectWorldCoordinates(closest_object);
+                     double object_distance = (object_coordinates_ - new_object_coordinates).squaredNorm();
+                     if(object_distance < 0.1)
+                     {
+                        object_coordinates_ = new_object_coordinates;
+                        return true;
+                     }
+                  }
                }
             }
          }
 
-         return closest_object;
+         if(closest_object != -1)
+         {
+            object_coordinates_ = getObjectWorldCoordinates(closest_object);
+            old_object_ = true;
+            return true;
+         }
+
+         old_object_ = false;
+         return false;
       }
 
-      
+      Eigen::Vector2d getObjectWorldCoordinates(int index) 
+      {
+         return navigation_.convertToWorldCoordinate(object_candidates_[index].getCartesianCoordinates());
+      }
 
       void odomCallback(const nav_msgs::Odometry::ConstPtr& msg) 
       {

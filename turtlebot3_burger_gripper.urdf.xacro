@@ -135,7 +135,7 @@
   </joint>
 
   <link name="imu_link"/>
-  
+
   <!-- Top Scanner -->
   <joint name="top_scan_joint" type="fixed">
     <parent link="base_link"/>
@@ -242,18 +242,18 @@
   <joint name="gripper_left_joint" type="fixed">
     <parent link="gripper_beam"/>
     <child link="gripper_left"/>
-    <origin xyz="0.07 0.0 0.03" rpy="0 0 0"/>
+    <origin xyz="0.08 0.0 0.03" rpy="0 0 0"/>
   </joint>
 
   <link name="gripper_left" type="fixed">
     <visual>
       <geometry>
-        <box size="0.01 0.01 0.06"/>
+        <box size="0.01 0.01 0.08"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <box size="0.01 0.01 0.06"/>
+        <box size="0.01 0.01 0.08"/>
       </geometry>
     </collision>
   </link>
@@ -261,18 +261,18 @@
   <joint name="gripper_right_joint" type="fixed">
     <parent link="gripper_beam"/>
     <child link="gripper_right"/>
-    <origin xyz="-0.07 0.0 0.03" rpy="0 0 0"/>
+    <origin xyz="-0.08 0.0 0.03" rpy="0 0 0"/>
   </joint>
 
   <link name="gripper_right" type="fixed">
     <visual>
       <geometry>
-        <box size="0.01 0.01 0.06"/>
+        <box size="0.01 0.01 0.08"/>
       </geometry>
     </visual>
     <collision>
       <geometry>
-        <box size="0.01 0.01 0.06"/>
+        <box size="0.01 0.01 0.08"/>
       </geometry>
     </collision>
   </link>
