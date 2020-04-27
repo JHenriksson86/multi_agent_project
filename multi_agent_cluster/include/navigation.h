@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include "eigen3/Eigen/Dense"
+#include "ros/ros.h"
 
 namespace robot{
 
@@ -36,6 +37,11 @@ namespace robot{
 
       void setTheta(double theta) { pose_[2] = theta; }
 
+      Eigen::Vector2d getCoordinates() const
+      {
+         return Eigen::Vector2d(pose_[0], pose_[1]);
+      }
+
       Eigen::Vector3d getPoseVector() const 
       {
          return pose_;
@@ -67,12 +73,13 @@ namespace robot{
          this->pose_.setPose(x, y, theta);
       }
 
-
       double getX() const { return pose_.getX(); }
 
       double getY() const { return pose_.getY(); }
 
       double getTheta() const { return pose_.getTheta(); }
+
+      Eigen::Vector2d getCoordinates() const { return pose_.getCoordinates(); }
 
       Eigen::Vector3d getPoseVector() const
       {
@@ -99,6 +106,11 @@ namespace robot{
          double robotY = y - this->pose_.getY();
 
          return std::sqrt(std::pow(robotX, 2) + std::pow(robotY, 2));
+      }
+
+      double getDistanceToCoordinate(Eigen::Vector2d coordinate) const 
+      {
+         return getDistanceToCoordinate(coordinate[0], coordinate[1]);
       }
 
       double getAngleToCoordinate(double x, double y) const 

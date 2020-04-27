@@ -44,7 +44,11 @@ namespace robot{
       ClusteringState cluster_state_;
       double turn_theta_;
       Eigen::Vector2d object_coordinates_;
+      Eigen::Vector2d dropoff_coordinates_;
       bool old_object_;
+
+      Eigen::Vector2d unstuck_robot_coordinates_;
+      ros::Time time_stuck_;
       
       std::string robot_ns_;
 
@@ -74,6 +78,10 @@ namespace robot{
 
          object_coordinates_ = Eigen::Vector2d::Zero();
          old_object_ = false;
+         dropoff_coordinates_ = Eigen::Vector2d::Zero();
+
+         unstuck_robot_coordinates_ = Eigen::Vector2d::Zero();
+         time_stuck_ = ros::Time::now();
 
          robot_ns_ = node_handle->getNamespace();
       }
@@ -97,13 +105,15 @@ namespace robot{
       void clustering(geometry_msgs::Twist* msg)
       {
          bool found_object = findClosestObject();
+
          switch(cluster_state_)
          {
             case ClusteringState::Searching:
             ROS_INFO("%s: ClusteringState::Searching", robot_ns_.c_str());
             if(!found_object)
             {
-               Avoidance::avoid(top_scan_, msg);
+               //Avoidance::avoid(top_scan_, msg);
+               randomWalk(msg);
             }
             else
             {
@@ -132,9 +142,12 @@ namespace robot{
             break;
             case ClusteringState::Clustering:
             ROS_INFO("%s: ClusteringState::Clustering", robot_ns_.c_str());
-               Goto::gotoAvoid(navigation_, top_scan_, msg, 0.0, 0.0);
-               if(navigation_.getDistanceToCoordinate(0.0, 0.0) < 0.20)
+               msg->linear.x = 0.5 * FuzzyFunctions::NOT(Avoidance::obstacle(top_scan_, 1.0, 0.25));
+               msg->angular.z = 0.0;
+
+               if(atWall(top_scan_, 0.3))
                {
+                  dropoff_coordinates_ = navigation_.getCoordinates();
                   cluster_state_ = ClusteringState::Reversing;
                }
                if(navigation_.getDistanceToCoordinate(object_coordinates_[0], object_coordinates_[1]) > 0.25)
@@ -146,7 +159,7 @@ namespace robot{
             ROS_INFO("%s: ClusteringState::Reversing", robot_ns_.c_str());
                msg->linear.x = -0.5;
                msg->angular.z = 0.0;
-               if(navigation_.getDistanceToCoordinate(0.0, 0.0) > 1.5)
+               if(navigation_.getDistanceToCoordinate(dropoff_coordinates_) > 1.5)
                {
                   cluster_state_ = ClusteringState::Turning;
                   turn_theta_ = navigation_.getThetaSum(M_PI/2.0);
@@ -164,11 +177,53 @@ namespace robot{
          }
       }
 
+      bool atWall(const LaserScan& scan, double threshold) const
+      {
+         double distance = std::fmin(
+            scan.regionDistance(degreesToRadians(355.0), degreesToRadians(360.0)),
+            scan.regionDistance(degreesToRadians(0.0), degreesToRadians(5.0))
+         );
+
+         if(distance < threshold)
+            return true;
+         return false;
+      }
+
+      bool stuck(int seconds)
+      {
+         int time_stuck = ros::Time::now().toSec() - time_stuck_.toSec();
+         double distance = navigation_.getDistanceToCoordinate(unstuck_robot_coordinates_);
+
+         if(distance > 0.1)
+         {
+            unstuck_robot_coordinates_ = navigation_.getCoordinates();
+            time_stuck_ = ros::Time::now();
+            return false;
+         }
+         if(time_stuck > seconds)
+         {
+            ROS_WARN("Stuck: Time stuck = %d, Distance %.2f", time_stuck, distance);
+            return true;
+         }
+
+         return false;
+      }
+
+      bool clusterToPoint(geometry_msgs::Twist* msg, double x, double y)
+      {
+         Goto::gotoAvoid(navigation_, top_scan_, msg, x, y);
+
+         if(navigation_.getDistanceToCoordinate(x, y) < 0.20)
+            return true;
+
+         return false;
+      }
+
       void randomWalk(geometry_msgs::Twist* msg)
       {
          double obstacle_left = top_scan_.regionDistance(degreesToRadians(0.0), degreesToRadians(60.0));
          double obstacle_right = top_scan_.regionDistance(degreesToRadians(360.0), degreesToRadians(300.0));
-         ROS_INFO("RandomWalk: obstacle left = %.2f, obstacle right = %.2f", obstacle_left, obstacle_right);
+         ROS_DEBUG("RandomWalk: obstacle left = %.2f, obstacle right = %.2f", obstacle_left, obstacle_right);
 
          switch(random_state_)
          {

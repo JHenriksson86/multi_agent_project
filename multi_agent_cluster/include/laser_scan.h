@@ -140,6 +140,28 @@ public:
       return max_distance_;
    }
 
+   double regionAverageDistance(const double &start, const double &stop) const
+   {
+      int limit1 = 0, limit2 = 0;
+      if (!this->points_.empty())
+      {
+         for (int i = 0; i < points_.size(); i++)
+         {
+            if (points_[i].getAngle() < start)
+               limit1++;
+            if (points_[i].getAngle() < stop)
+               limit2++;
+         }
+
+         if (limit1 > limit2)
+            return getAverageDistance(limit2, limit1);
+
+         return getAverageDistance(limit1, limit2);
+      }
+      
+      return max_distance_;
+   }
+
    void updateLaserscan(const sensor_msgs::LaserScan::ConstPtr &msg)
    {
       points_.clear();
@@ -193,6 +215,19 @@ public:
             distance = points_[i].getDistance();
       } 
       return distance;
+   }
+
+   double getAverageDistance(int start_pos, int end_pos) const
+   {
+      double distance_sum = 0.0;
+      int n = 0;
+      for(n = start_pos;  n < end_pos; n++)
+      {
+         distance_sum += points_[n].getDistance();
+      } 
+      if(n != 0)
+         return distance_sum / (double)n;
+      return max_distance_;
    }
 };
 
