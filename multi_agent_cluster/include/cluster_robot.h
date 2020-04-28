@@ -104,7 +104,7 @@ namespace robot{
       bool ok() { return nh_->ok(); }
 
    private:
-   
+
       void clustering(geometry_msgs::Twist* msg)
       {
          bool found_object = false;
@@ -198,7 +198,6 @@ namespace robot{
                if(navigation_.getDistanceToCoordinate(dropoff_coordinates_) > 1.5)
                {
                   cluster_state_ = ClusteringState::Searching;
-                  turn_theta_ = navigation_.getThetaSum(M_PI/2.0);
                }
             break;
          }
