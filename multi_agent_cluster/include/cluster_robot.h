@@ -21,7 +21,7 @@
 namespace robot{
    enum class RandomWalkState { inactive, active };
 
-   enum class ClusteringState { Searching, Goto, Clustering, Reversing, Turning };
+   enum class ClusteringState { Searching, Goto, Clustering, Reversing, Turning, Stuck };
 
    class ClusterRobot
    {
@@ -46,6 +46,7 @@ namespace robot{
       Eigen::Vector2d object_coordinates_;
       Eigen::Vector2d dropoff_coordinates_;
       bool old_object_;
+      bool init_;
 
       Eigen::Vector2d unstuck_robot_coordinates_;
       ros::Time time_stuck_;
@@ -82,6 +83,7 @@ namespace robot{
 
          unstuck_robot_coordinates_ = Eigen::Vector2d::Zero();
          time_stuck_ = ros::Time::now();
+         init_ = true;
 
          robot_ns_ = node_handle->getNamespace();
       }
@@ -102,46 +104,59 @@ namespace robot{
       bool ok() { return nh_->ok(); }
 
    private:
+   
       void clustering(geometry_msgs::Twist* msg)
       {
-         bool found_object = findClosestObject();
+         bool found_object = false;
+         if(checkStuck(5) && !init_)
+         {
+            cluster_state_ = ClusteringState::Stuck;
+            dropoff_coordinates_ = navigation_.getCoordinates();
+         }
+         else
+         {
+            found_object = findClosestObject();
+         }
 
          switch(cluster_state_)
          {
             case ClusteringState::Searching:
-            ROS_INFO("%s: ClusteringState::Searching", robot_ns_.c_str());
-            if(!found_object)
-            {
-               //Avoidance::avoid(top_scan_, msg);
-               randomWalk(msg);
-            }
-            else
-            {
-               cluster_state_ = ClusteringState::Goto;
-            }
+
+               ROS_INFO("%s: ClusteringState::Searching", robot_ns_.c_str());
+               if(!found_object)
+               {
+                  //Avoidance::avoid(top_scan_, msg);
+                  randomWalk(msg);
+               }
+               else
+               {
+                  cluster_state_ = ClusteringState::Goto;
+                  init_ = false;
+               }
             break;
             case ClusteringState::Goto:
             
-            if(found_object)
-            {
-               ROS_INFO("%s: ClusteringState::Goto at coordinates x = %.2f, y = %.2f", 
-                  robot_ns_.c_str(), object_coordinates_[0], object_coordinates_[1]);
-
-               Goto::gotoAvoid(navigation_, top_scan_, msg, 
-                  object_coordinates_[0], object_coordinates_[1]);
-
-               if(navigation_.getDistanceToCoordinate(object_coordinates_[0], object_coordinates_[1]) < 0.15)
+               if(found_object)
                {
-                  cluster_state_ = ClusteringState::Clustering;
+                  ROS_INFO("%s: ClusteringState::Goto at coordinates x = %.2f, y = %.2f", 
+                     robot_ns_.c_str(), object_coordinates_[0], object_coordinates_[1]);
+
+                  Goto::gotoAvoid(navigation_, top_scan_, msg, 
+                     object_coordinates_[0], object_coordinates_[1]);
+
+                  if(navigation_.getDistanceToCoordinate(object_coordinates_[0], object_coordinates_[1]) < 0.15)
+                  {
+                     cluster_state_ = ClusteringState::Clustering;
+                  }
                }
-            }
-            else
-            {
-               cluster_state_ = ClusteringState::Searching;
-            }
+               else
+               {
+                  cluster_state_ = ClusteringState::Searching;
+               }
             break;
             case ClusteringState::Clustering:
-            ROS_INFO("%s: ClusteringState::Clustering", robot_ns_.c_str());
+
+               ROS_INFO("%s: ClusteringState::Clustering", robot_ns_.c_str());
                msg->linear.x = 0.5 * FuzzyFunctions::NOT(Avoidance::obstacle(top_scan_, 1.0, 0.25));
                msg->angular.z = 0.0;
 
@@ -156,7 +171,8 @@ namespace robot{
                }
             break;
             case ClusteringState::Reversing:
-            ROS_INFO("%s: ClusteringState::Reversing", robot_ns_.c_str());
+
+               ROS_INFO("%s: ClusteringState::Reversing", robot_ns_.c_str());
                msg->linear.x = -0.5;
                msg->angular.z = 0.0;
                if(navigation_.getDistanceToCoordinate(dropoff_coordinates_) > 1.5)
@@ -166,12 +182,23 @@ namespace robot{
                }
             break;
             case ClusteringState::Turning:
-            ROS_INFO("%s: ClusteringState::Turning", robot_ns_.c_str());
+
+               ROS_INFO("%s: ClusteringState::Turning", robot_ns_.c_str());
                msg->linear.x = 0.0;
                msg->angular.z = 1.0;
                if(std::fabs(navigation_.getThetaDiff(turn_theta_)) < 0.1)
                {
                   cluster_state_ = ClusteringState::Searching;
+               }
+            break;
+            case ClusteringState::Stuck:
+
+               ROS_INFO("%s: ClusteringState::Stuck", robot_ns_.c_str());
+               randomWalk(msg);
+               if(navigation_.getDistanceToCoordinate(dropoff_coordinates_) > 1.5)
+               {
+                  cluster_state_ = ClusteringState::Searching;
+                  turn_theta_ = navigation_.getThetaSum(M_PI/2.0);
                }
             break;
          }
@@ -189,7 +216,7 @@ namespace robot{
          return false;
       }
 
-      bool stuck(int seconds)
+      bool checkStuck(int seconds)
       {
          int time_stuck = ros::Time::now().toSec() - time_stuck_.toSec();
          double distance = navigation_.getDistanceToCoordinate(unstuck_robot_coordinates_);
