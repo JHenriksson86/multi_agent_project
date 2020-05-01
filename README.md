@@ -16,8 +16,4 @@ start the robots roslaunch multi_agent_cluster run.launch
 
 To change the amount of objects in the environment the world file will need to be edited namely under the population tag and the model count.
 
-<population name="box_population1">
-  <model_count>30</model_count>
-</population>
-
 The world file is located in the multi_agent_avoid/worlds folder and is called turtlebot3_stage_prime.world.
