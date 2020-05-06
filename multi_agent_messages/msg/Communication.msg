@@ -1,0 +1,1 @@
+string name    #Name of the robot
