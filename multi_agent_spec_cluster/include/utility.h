@@ -1,8 +1,12 @@
 #ifndef UTILITY_H
 #define UTILITY_H
 
+#include <random>
+#include <chrono>
+
 #include "ros/ros.h"
 #include "geometry_msgs/Twist.h"
+
 #include "fuzzy.h"
 #include "navigation.h"
 #include "laser_scan.h"
@@ -79,6 +83,19 @@ struct Avoidance
       return FuzzyFunctions::rampUp(
          scan.regionDistance(degreesToRadians(270.0), degreesToRadians(350.0)), 
          slowdown_threshold, stop_threshold
+      );
+   }
+
+   static double obstacleAhead(const LaserScan& scan, 
+      double slowdown_threshold, double stop_threshold)
+   {
+      return FuzzyFunctions::rampUp(
+         FuzzyFunctions::OR(
+            scan.regionDistance(degreesToRadians(0.0), degreesToRadians(45.0)),
+            scan.regionDistance(degreesToRadians(315.0), degreesToRadians(360.0))
+         ), 
+         slowdown_threshold, 
+         stop_threshold
       );
    }
 
@@ -175,57 +192,82 @@ struct Goto
    }
 };
 
-/*
-void publishMarker(const LaserScan& scan)
+class RandomWalk
 {
-   visualization_msgs::Marker marker = createMarker();
-   for(int i = 0; i < scan.size(); i++) 
+   private:
+
+   enum class RandomWalkState { forward, turning };
+   double random_turn_;
+   RandomWalkState state_;
+   Navigation* navigation_;
+   LaserScan* scan_;
+
+   public:
+
+   RandomWalk(Navigation* navigation, LaserScan* scan)
    {
-      if(scan[i].getDistance() > 0.0)
+      this->navigation_ = navigation;
+      this->scan_ = scan;
+      this->random_turn_ = 0.0;
+      this->state_ = RandomWalkState::forward;
+   }
+
+   void run(geometry_msgs::Twist* msg)
+   {
+      double obstacle_right = scan_->regionDistance(degreesToRadians(0.0), degreesToRadians(45.0));
+      double obstacle_left = scan_->regionDistance(degreesToRadians(315.0), degreesToRadians(360.0));
+      ROS_DEBUG("RandomWalk: obstacle left = %.2f, obstacle right = %.2f", obstacle_left, obstacle_right);
+
+      switch(state_)
       {
-            geometry_msgs::Point point;
-            point.x = scan[i].getX();
-            point.y = scan[i].getY();
-            point.z = 0.0;
-            marker.points.push_back(point);
+         case RandomWalkState::forward:
+            ROS_DEBUG("RandomWalk: state = forward");
+            if(std::fmin(obstacle_left, obstacle_right) < 0.5)
+            {
+               ROS_DEBUG("RandomWalk: obstacle detected changing state.");
+               unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+               std::default_random_engine generator(seed);
+               std::uniform_real_distribution<double> distribution(degreesToRadians(45.0),degreesToRadians(90.0));
+               double random_number = distribution(generator);
+               ROS_DEBUG("RandomWalk: generated random number = %.2f.", random_number);
+
+               if(obstacle_left <= obstacle_right)
+               {
+                  random_turn_ = navigation_->getThetaSum(random_number);
+               }
+               else
+               {
+                  random_turn_ = navigation_->getThetaDiff(random_number);
+               }
+               
+               state_ = RandomWalkState::turning;
+               msg->linear.x = 0.0;
+            }
+            else
+            {
+               msg->linear.x = 0.5 * FuzzyFunctions::NOT(Avoidance::obstacleAhead(*scan_, 0.7, 0.45));
+            }
+            break;
+         case RandomWalkState::turning:
+            ROS_DEBUG("RandomWalk: state = turning");
+            double angle_difference = random_turn_ - navigation_->getTheta();
+            ROS_DEBUG("RandomWalk: random avoid turn angle = %.2f, difference = %.2f", 
+               random_turn_, angle_difference);
+
+            msg->angular.z += 
+               Goto::positionLeft(angle_difference, degreesToRadians(20.0), degreesToRadians(1.0));
+
+            msg->angular.z -= 
+               Goto::positionRight(angle_difference, -degreesToRadians(20.0), -degreesToRadians(1.0));
+
+            if(std::fabs(angle_difference) < degreesToRadians(5.0))
+            {
+               state_ = RandomWalkState::forward;
+            }
+            break;
       }
-   } 
-   marker_pub_.publish(marker);
-}
-
-visualization_msgs::Marker createMarker() 
-{
-   visualization_msgs::Marker marker;
-   
-   std::string frame_id = nh_->getNamespace() + "/base_footprint";
-   frame_id.erase(0,1);
-   marker.header.frame_id = frame_id;
-   marker.header.stamp = ros::Time();
-   marker.ns = nh_->getNamespace();
-   marker.type = visualization_msgs::Marker::POINTS;
-   marker.action = visualization_msgs::Marker::ADD;
-   
-   marker.pose.position.x = 0.0;
-   marker.pose.position.y = 0.0;
-   marker.pose.position.z = 0.0;
-   
-   marker.pose.orientation.x = 0.0;
-   marker.pose.orientation.y = 0.0;
-   marker.pose.orientation.z = 0.0;
-   marker.pose.orientation.w = 1.0;
-   
-   marker.scale.x = 0.05;
-   marker.scale.y = 0.05;
-   marker.scale.z = 0.05;
-
-   marker.color.a = 1.0; // Don't forget to set the alpha!
-   marker.color.r = 1.0;
-   marker.color.g = 1.0;
-   marker.color.b = 1.0;
-   
-   return marker;
-}
-*/
+   }
+};
 
 }; // namespace robot
 

@@ -123,7 +123,8 @@ namespace robot{
       }
 
       private:
-      double subtractAngles(double angle1, double angle2) const 
+
+      double subtractAngles(double angle1, double angle2) const
       {
          double angle = angle1 - angle2;
          
@@ -134,7 +135,7 @@ namespace robot{
          return angle;
       }
 
-      double addAngles(double angle1, double angle2) const 
+      double addAngles(double angle1, double angle2) const
       {
          double angle = angle1 + angle2;
          

@@ -1,1 +1,5 @@
-string name    #Name of the robot
+std_msgs/Header header
+string sender
+string receiver
+string message_type
+string message

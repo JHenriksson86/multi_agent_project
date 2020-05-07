@@ -1,109 +1,60 @@
 <launch>
 
-  <arg name="robot_model" default="$(find xacro)/xacro $(find turtlebot3_description)/urdf/turtlebot3_burger_gripper.urdf.xacro"/>
-
-  <!-- Robot 1 -->
+  <arg name="scout_robot_model" default="$(find xacro)/xacro $(find turtlebot3_description)/urdf/turtlebot3_burger_scout.urdf.xacro"/>
+  <arg name="cluster_robot_model" default="$(find xacro)/xacro $(find turtlebot3_description)/urdf/turtlebot3_burger_gripper.urdf.xacro"/>
   
-  <arg name="r1"  default="robot1"/>
-  <arg name="r1_x" default="1.0"/>
-  <arg name="r1_y" default="0.0"/>
-  <arg name="r1_z" default="0.0"/>
-  <arg name="r1_yaw" default="0.01"/>
+  <!-- Scout -->
+  
+  <arg name="scout"  default="scout"/>
+  <arg name="scout_x" default="1.0"/>
+  <arg name="scout_y" default="0.0"/>
+  <arg name="scout_z" default="0.0"/>
+  <arg name="scout_yaw" default="0.01"/>
 
-  <group ns = "$(arg r1)">
-    <param name="robot_description" command="$(arg robot_model)"/>
+  <group ns = "$(arg scout)">
+    <param name="robot_description" command="$(arg scout_robot_model)"/>
 
     <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
       <param name="publish_frequency" type="double" value="50.0" />
-      <param name="tf_prefix" value="$(arg r1)" />
+      <param name="tf_prefix" value="$(arg scout)" />
     </node>
     
     <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" 
-	  args="-urdf -model $(arg r1) -x $(arg r1_x) -y $(arg r1_y) -z $(arg r1_z) -Y $(arg r1_yaw) -param robot_description" />
+	  args="-urdf -model $(arg scout) -x $(arg scout_x) -y $(arg scout_y) -z $(arg scout_z) -Y $(arg scout_yaw) -param robot_description" />
     
-    <node name="multi_agent_cluster_node" pkg="multi_agent_cluster" type="multi_agent_cluster_node" output="screen">
-      <param name="odometry_topic" type="string" value="/$(arg r1)/odom" />
-      <param name="movement_topic" type="string" value="/$(arg r1)/cmd_vel" />
-      <param name="top_scan_topic" type="string" value="/$(arg r1)/top_scan" />
-      <param name="bottom_scan_topic" type="string" value="/$(arg r1)/bottom_scan" />
+    <node name="scout_robot_node" pkg="multi_agent_spec_cluster" type="scout_robot_node" output="screen">
+      <param name="odometry_topic" type="string" value="/$(arg scout)/odom" />
+      <param name="movement_topic" type="string" value="/$(arg scout)/cmd_vel" />
+      <param name="top_scan_topic" type="string" value="/$(arg scout)/top_scan" />
+      <param name="bottom_scan_topic" type="string" value="/$(arg scout)/bottom_scan" />
+      <param name="communication_topic" type="string" value="/communication" />
     </node>
   </group>
+  
+  <!-- Cluster Robot 1 -->
+  <arg name="c1"  default="cluster1"/>
+  <arg name="c1_x" default="-1.0"/>
+  <arg name="c1_y" default="0.0"/>
+  <arg name="c1_z" default="0.0"/>
+  <arg name="c1_yaw" default="3.15"/>
 
-  <!-- Robot 2 -->
-  <arg name="r2"  default="robot2"/>
-  <arg name="r2_x" default="-1.0"/>
-  <arg name="r2_y" default="0.0"/>
-  <arg name="r2_z" default="0.0"/>
-  <arg name="r2_yaw" default="3.15"/>
-
-  <group ns = "$(arg r2)">
-    <param name="robot_description" command="$(arg robot_model)"/>
-
-    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
-      <param name="publish_frequency" type="double" value="50.0" />
-      <param name="tf_prefix" value="$(arg r2)" />
-    </node>
-    
-    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" 
-	  args="-urdf -model $(arg r2) -x $(arg r2_x) -y $(arg r2_y) -z $(arg r2_z) -Y $(arg r2_yaw) -param robot_description" />
-    
-    <node name="multi_agent_cluster_node" pkg="multi_agent_cluster" type="multi_agent_cluster_node" output="screen">
-      <param name="odometry_topic" type="string" value="/$(arg r2)/odom" />
-      <param name="movement_topic" type="string" value="/$(arg r2)/cmd_vel" />
-      <param name="top_scan_topic" type="string" value="/$(arg r2)/top_scan" />
-      <param name="bottom_scan_topic" type="string" value="/$(arg r2)/bottom_scan" />
-    </node>
-  </group>
-
-  <!-- Robot 3 -->
-  <arg name="r3"  default="robot3"/>
-  <arg name="r3_x" default="0.0"/>
-  <arg name="r3_y" default="1.0"/>
-  <arg name="r3_z" default="0.0"/>
-  <arg name="r3_yaw" default="1.58"/>
-
-  <group ns = "$(arg r3)">
-    <param name="robot_description" command="$(arg robot_model)"/>
+  <group ns = "$(arg c1)">
+    <param name="robot_description" command="$(arg cluster_robot_model)"/>
 
     <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
       <param name="publish_frequency" type="double" value="50.0" />
-      <param name="tf_prefix" value="$(arg r3)" />
+      <param name="tf_prefix" value="$(arg c1)" />
     </node>
     
     <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" 
-	  args="-urdf -model $(arg r3) -x $(arg r3_x) -y $(arg r3_y) -z $(arg r3_z) -Y $(arg r3_yaw) -param robot_description" />
+	  args="-urdf -model $(arg c1) -x $(arg c1_x) -y $(arg c1_y) -z $(arg c1_z) -Y $(arg c1_yaw) -param robot_description" />
     
-    <node name="multi_agent_cluster_node" pkg="multi_agent_cluster" type="multi_agent_cluster_node" output="screen">
-      <param name="odometry_topic" type="string" value="/$(arg r3)/odom" />
-      <param name="movement_topic" type="string" value="/$(arg r3)/cmd_vel" />
-      <param name="top_scan_topic" type="string" value="/$(arg r3)/top_scan" />
-      <param name="bottom_scan_topic" type="string" value="/$(arg r3)/bottom_scan" />
-    </node>
-  </group>
-
-  <!-- Robot 4 -->
-  <arg name="r4"  default="robot4"/>
-  <arg name="r4_x" default="0.0"/>
-  <arg name="r4_y" default="-1.0"/>
-  <arg name="r4_z" default="0.0"/>
-  <arg name="r4_yaw" default="4.74"/>
-
-  <group ns = "$(arg r4)">
-    <param name="robot_description" command="$(arg robot_model)"/>
-
-    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
-      <param name="publish_frequency" type="double" value="50.0" />
-      <param name="tf_prefix" value="$(arg r4)" />
-    </node>
-    
-    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" 
-	  args="-urdf -model $(arg r4) -x $(arg r4_x) -y $(arg r4_y) -z $(arg r4_z) -Y $(arg r4_yaw) -param robot_description" />
-    
-    <node name="multi_agent_cluster_node" pkg="multi_agent_cluster" type="multi_agent_cluster_node" output="screen">
-      <param name="odometry_topic" type="string" value="/$(arg r4)/odom" />
-      <param name="movement_topic" type="string" value="/$(arg r4)/cmd_vel" />
-      <param name="top_scan_topic" type="string" value="/$(arg r4)/top_scan" />
-      <param name="bottom_scan_topic" type="string" value="/$(arg r4)/bottom_scan" />
+    <node name="cluster_robot_node" pkg="multi_agent_spec_cluster" type="cluster_robot_node" output="screen">
+      <param name="odometry_topic" type="string" value="/$(arg c1)/odom" />
+      <param name="movement_topic" type="string" value="/$(arg c1)/cmd_vel" />
+      <param name="top_scan_topic" type="string" value="/$(arg c1)/top_scan" />
+      <param name="bottom_scan_topic" type="string" value="/$(arg c1)/bottom_scan" />
+      <param name="communication_topic" type="string" value="/communication" />
     </node>
   </group>
 
