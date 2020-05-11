@@ -22,10 +22,9 @@
 #include "fuzzy.h"
 #include "laser_scan.h"
 #include "multi_agent_messages/Communication.h"
+#include "message.h"
 
 namespace robot{
-
-   
 
    class ClusterRobot
    {
@@ -44,6 +43,7 @@ namespace robot{
       LaserScan top_scan_;
       LaserScan bottom_scan_;
       LaserScan object_candidates_;
+      MessageHandler msg_handler_;
 
       enum class ClusteringState { Waiting, Goto, Clustering, Reversing, Turning, Stuck };
       ClusteringState cluster_state_;
@@ -56,12 +56,11 @@ namespace robot{
       Eigen::Vector2d unstuck_robot_coordinates_;
       ros::Time time_stuck_;
       
-      
-
    public:
       ClusterRobot(ros::NodeHandle* node_handle, std::string robot_namespace,  
          std::string odom_topic, std::string movement_topic, std::string top_scan_topic, 
          std::string bottom_scan_topic, std::string communication_topic)
+         : msg_handler_(robot_namespace, RobotType::cluster)
       {
          ROS_DEBUG("ClusterRobot: Creating class instance and subscribing to topics.");
          this->nh_ = node_handle;
@@ -215,35 +214,9 @@ namespace robot{
 
       void communicationCallback(const multi_agent_messages::Communication::ConstPtr &msg)
       {
-         if(msg->receiver.compare("/all_cluster_robots") == 0 || 
-            msg->receiver.compare(robot_ns_) == 0)
-         {
-            ROS_INFO(
-               "%s: Received message\nfrom: %s\nto: %s\ntype: %s\nmessage: %s",
-               robot_ns_.c_str(), msg->sender.c_str(), msg->receiver.c_str(), 
-               msg->message_type.c_str(), msg->message.c_str()
-            );
-
-            if(msg->message_type.compare("ready") == 0)
-            {
-               ROS_INFO("%s: Publishing confimation message", robot_ns_.c_str());
-               communication_pub_.publish(getConfirmMessage());
-            }
-         }
+         msg_handler_.addMessage(msg);
       }
 
-      multi_agent_messages::Communication getConfirmMessage()
-      {
-         multi_agent_messages::Communication msg;
-         msg.header.stamp = ros::Time::now();
-         msg.header.frame_id = "World";
-
-         msg.sender = robot_ns_;
-         msg.receiver = "/scout";
-         msg.message_type = "confirm";
-         msg.message = "confirm";
-         return msg;
-      }
    };
 
 } // namespace robot

@@ -21,6 +21,7 @@
 #include "fuzzy.h"
 #include "laser_scan.h"
 #include "multi_agent_messages/Communication.h"
+#include "message.h"
 
 namespace robot{
    
@@ -42,6 +43,7 @@ namespace robot{
       LaserScan bottom_scan_;
       LaserScan object_candidates_;
       RandomWalk random_walk_;
+      MessageHandler msg_handler_;
 
       enum class ScoutState { Searching, Auction };
       ScoutState state_;
@@ -59,7 +61,7 @@ namespace robot{
       ScoutRobot(ros::NodeHandle* node_handle, std::string robot_namespace,
          std::string odom_topic, std::string movement_topic, std::string top_scan_topic, 
          std::string bottom_scan_topic, std::string communication_topic)
-         : random_walk_(&navigation_, &bottom_scan_)
+         : random_walk_(&navigation_, &bottom_scan_), msg_handler_(robot_namespace, RobotType::scout)
       {
          ROS_DEBUG("ScoutRobot: Creating class instance and subscribing to topics.");
          this->nh_ = node_handle;
@@ -233,14 +235,7 @@ namespace robot{
 
       void communicationCallback(const multi_agent_messages::Communication::ConstPtr &msg)
       {
-         if(msg->receiver.compare(robot_ns_) == 0)
-         {
-            ROS_INFO(
-               "%s:Received message\nfrom: %s\nto: %s\ntype: %s\nmessage: %s",
-               robot_ns_.c_str(), msg->sender.c_str(), msg->receiver.c_str(), 
-               msg->message_type.c_str(), msg->message.c_str()
-            );
-         }
+         msg_handler_.addMessage(msg);
       }
    };
 
