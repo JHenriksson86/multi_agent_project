@@ -179,7 +179,7 @@
       <box>
         <size>3.5 3.5 0.01</size>
       </box>
-      <model_count>30</model_count>
+      <model_count>5</model_count>
       <distribution>
         <type>random</type>
       </distribution>

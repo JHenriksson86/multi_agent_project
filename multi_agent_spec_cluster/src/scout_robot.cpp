@@ -40,10 +40,15 @@ int main(int argc, char *argv[])
    ros::param::get(nh_namespace + "/scout_robot_node/communication_topic", communication_topic);
    ROS_DEBUG_STREAM("Communication topic set: " << communication_topic);
 
+   int number_of_cluster_robots = 1;
+   ros::param::get(nh_namespace + "/scout_robot_node/number_of_cluster_robots", number_of_cluster_robots);
+   ROS_DEBUG_STREAM("Number of cluster robots: " << number_of_cluster_robots);
+
    // Creating class instance
    ScoutRobot robot(
       &nh,  nh_namespace, odometry_topic, movement_topic, 
-      top_scan_topic, bottom_scan_topic, communication_topic
+      top_scan_topic, bottom_scan_topic, communication_topic,
+      number_of_cluster_robots
    );
 
    // ROS loop

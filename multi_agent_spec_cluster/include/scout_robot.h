@@ -43,7 +43,7 @@ namespace robot{
       LaserScan bottom_scan_;
       LaserScan object_candidates_;
       RandomWalk random_walk_;
-      MessageHandler msg_handler_;
+      ScoutMessageHandler msg_handler_;
 
       enum class ScoutState { Searching, Auction };
       ScoutState state_;
@@ -60,8 +60,10 @@ namespace robot{
 
       ScoutRobot(ros::NodeHandle* node_handle, std::string robot_namespace,
          std::string odom_topic, std::string movement_topic, std::string top_scan_topic, 
-         std::string bottom_scan_topic, std::string communication_topic)
-         : random_walk_(&navigation_, &bottom_scan_), msg_handler_(robot_namespace, RobotType::scout)
+         std::string bottom_scan_topic, std::string communication_topic,
+         int number_of_cluster_robots)
+         : random_walk_(&navigation_, &bottom_scan_), 
+         msg_handler_(robot_namespace, number_of_cluster_robots)
       {
          ROS_DEBUG("ScoutRobot: Creating class instance and subscribing to topics.");
          this->nh_ = node_handle;
@@ -106,6 +108,11 @@ namespace robot{
          random_walk_.run(&msg);
          ROS_DEBUG("%s: Robot linear vel = %.2f, angular vel = %.2f", 
             robot_ns_.c_str(), msg.linear.x, msg.angular.z);
+
+         if(msg_handler_.run())
+         {
+            communication_pub_.publish(msg_handler_.getMessage());
+         }
 
          this->movement_pub_.publish(msg);
       }

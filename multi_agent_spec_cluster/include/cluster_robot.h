@@ -43,7 +43,7 @@ namespace robot{
       LaserScan top_scan_;
       LaserScan bottom_scan_;
       LaserScan object_candidates_;
-      MessageHandler msg_handler_;
+      ClusterMessageHandler msg_handler_;
 
       enum class ClusteringState { Waiting, Goto, Clustering, Reversing, Turning, Stuck };
       ClusteringState cluster_state_;
@@ -60,7 +60,7 @@ namespace robot{
       ClusterRobot(ros::NodeHandle* node_handle, std::string robot_namespace,  
          std::string odom_topic, std::string movement_topic, std::string top_scan_topic, 
          std::string bottom_scan_topic, std::string communication_topic)
-         : msg_handler_(robot_namespace, RobotType::cluster)
+         : msg_handler_(robot_namespace, &navigation_)
       {
          ROS_DEBUG("ClusterRobot: Creating class instance and subscribing to topics.");
          this->nh_ = node_handle;
@@ -105,6 +105,11 @@ namespace robot{
          //clustering(&msg);
          ROS_DEBUG("%s: Robot linear vel = %.2f, angular vel = %.2f", 
             robot_ns_.c_str(), msg.linear.x, msg.angular.z);
+
+         if(msg_handler_.run())
+         {
+            communication_pub_.publish(msg_handler_.getMessage());
+         }
 
          this->movement_pub_.publish(msg);
       }

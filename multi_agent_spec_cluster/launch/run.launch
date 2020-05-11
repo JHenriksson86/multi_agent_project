@@ -28,6 +28,7 @@
       <param name="top_scan_topic" type="string" value="/$(arg scout)/top_scan" />
       <param name="bottom_scan_topic" type="string" value="/$(arg scout)/bottom_scan" />
       <param name="communication_topic" type="string" value="/communication" />
+      <param name="number_of_cluster_robots" type="int" value="1" />
     </node>
   </group>
   
