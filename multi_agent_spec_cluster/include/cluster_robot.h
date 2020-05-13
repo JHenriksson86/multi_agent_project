@@ -60,7 +60,7 @@ namespace robot{
       ClusterRobot(ros::NodeHandle* node_handle, std::string robot_namespace,  
          std::string odom_topic, std::string movement_topic, std::string top_scan_topic, 
          std::string bottom_scan_topic, std::string communication_topic)
-         : msg_handler_(robot_namespace, &navigation_)
+         : msg_handler_(robot_namespace)
       {
          ROS_DEBUG("ClusterRobot: Creating class instance and subscribing to topics.");
          this->nh_ = node_handle;
@@ -106,7 +106,8 @@ namespace robot{
          ROS_DEBUG("%s: Robot linear vel = %.2f, angular vel = %.2f", 
             robot_ns_.c_str(), msg.linear.x, msg.angular.z);
 
-         if(msg_handler_.run())
+         msg_handler_.run();
+         while(!msg_handler_.messageOutEmpty())
          {
             communication_pub_.publish(msg_handler_.getMessage());
          }
@@ -217,7 +218,7 @@ namespace robot{
          bottom_scan_.updateLaserscan(msg);
       }
 
-      void communicationCallback(const multi_agent_messages::Communication::ConstPtr &msg)
+      void communicationCallback(const multi_agent_messages::Communication::Ptr &msg)
       {
          msg_handler_.addMessage(msg);
       }

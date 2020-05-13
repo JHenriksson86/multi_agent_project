@@ -45,10 +45,14 @@ namespace robot{
       RandomWalk random_walk_;
       ScoutMessageHandler msg_handler_;
 
-      enum class ScoutState { Searching, Auction };
+      enum class ScoutState { Starting, Searching, Auction, Bidding};
       ScoutState state_;
-      double turn_theta_;
+      bool start_procedure_init_;
+
       Eigen::Vector2d object_coordinates_;
+      std::vector<Eigen::Vector2d> auctioned_objects_;
+
+      double turn_theta_;
       Eigen::Vector2d dropoff_coordinates_;
       bool old_object_;
       bool init_;
@@ -87,16 +91,10 @@ namespace robot{
          this->communication_pub_ = nh_->advertise<multi_agent_messages::Communication>(communication_topic, 100);
 
          robot_ns_ = robot_namespace;
-
-         state_ = ScoutState::Searching;
-         turn_theta_ = 0.0;
+         scoutStateStarting();
+         
          object_coordinates_ = Eigen::Vector2d::Zero();
          old_object_ = false;
-         dropoff_coordinates_ = Eigen::Vector2d::Zero();
-
-         unstuck_robot_coordinates_ = Eigen::Vector2d::Zero();
-         time_stuck_ = ros::Time::now();
-         init_ = true;
       }
 
       void run()
@@ -105,11 +103,13 @@ namespace robot{
          msg.linear.x = 0.0;
          msg.angular.z = 0.0; 
 
-         random_walk_.run(&msg);
+         clustering(&msg);
+
          ROS_DEBUG("%s: Robot linear vel = %.2f, angular vel = %.2f", 
             robot_ns_.c_str(), msg.linear.x, msg.angular.z);
 
-         if(msg_handler_.run())
+         msg_handler_.run();
+         while(!msg_handler_.messageOutEmpty())
          {
             communication_pub_.publish(msg_handler_.getMessage());
          }
@@ -123,33 +123,72 @@ namespace robot{
 
       void clustering(geometry_msgs::Twist* msg)
       {
+         bool found_object = findClosestObject();
          
+         switch(state_)
+         {
+            case ScoutState::Starting:
+               if(!start_procedure_init_)
+                  start_procedure_init_ = msg_handler_.initStartProcedure();
+               else if(msg_handler_.startProcedureFinished())
+                  scoutStateSearching();
+               break;
+            case ScoutState::Searching:
+               if(!found_object)
+               {
+                  random_walk_.run(msg);
+               }
+               else
+               {
+                  scoutStateAuction(object_coordinates_[0], object_coordinates_[1]);
+               }
+               break;
+            case ScoutState::Auction:
+               if(msg_handler_.initAuction(object_coordinates_[0], object_coordinates_[1]))
+               {
+                  scoutStateBidding();
+               }
+               break;
+            case ScoutState::Bidding:
+               if(msg_handler_.auctionFinished())
+               {
+                  auctioned_objects_.push_back(
+                     Eigen::Vector2d(object_coordinates_[0], object_coordinates_[1])
+                  );
+                  scoutStateSearching();
+               }
+               break;
+         }
       }
 
-      bool checkStuck(int seconds)
+      void scoutStateStarting()
       {
-         int time_stuck = ros::Time::now().toSec() - time_stuck_.toSec();
-         double distance = navigation_.getDistanceToCoordinate(unstuck_robot_coordinates_);
-
-         if(distance > 0.1)
-         {
-            unstuck_robot_coordinates_ = navigation_.getCoordinates();
-            time_stuck_ = ros::Time::now();
-            return false;
-         }
-         if(time_stuck > seconds)
-         {
-            ROS_WARN("Stuck: Time stuck = %d, Distance %.2f", time_stuck, distance);
-            return true;
-         }
-
-         return false;
+         ROS_INFO("%s: ScoutState::Starting", robot_ns_.c_str());
+         state_ = ScoutState::Starting;
+         start_procedure_init_ = false;
       }
 
-      
+      void scoutStateSearching()
+      {
+         ROS_INFO("%s: ScoutState::Searching", robot_ns_.c_str());
+         state_ = ScoutState::Searching;
+      }
+
+      void scoutStateAuction(double x, double y)
+      {
+         ROS_INFO("%s: ScoutState::Auction, x = %.2f y = %.2f", robot_ns_.c_str(), x, y);
+         state_ = ScoutState::Auction;
+      }
+
+      void scoutStateBidding()
+      {
+         ROS_INFO("%s: ScoutState::Bidding", robot_ns_.c_str());
+         state_ = ScoutState::Bidding;
+      }
 
       bool findClosestObject()
       {
+         ROS_DEBUG("%s: findClosestObject", robot_ns_.c_str());
          if(object_candidates_.empty())
             return false;
          
@@ -170,15 +209,15 @@ namespace robot{
             }
             if(close_objects > 2)
             {
-               if(candidate.getDistance() < distance)
+               Eigen::Vector2d new_object_coordinates = getObjectWorldCoordinates(i);
+               if(candidate.getDistance() < distance && !isOnAuctionList(new_object_coordinates))
                {
                   distance = candidate.getDistance();
                   closest_object = i;
+                  
                   if(old_object_)
                   {
-                     Eigen::Vector2d new_object_coordinates = getObjectWorldCoordinates(closest_object);
-                     double object_distance = (object_coordinates_ - new_object_coordinates).squaredNorm();
-                     if(object_distance < 0.1)
+                     if(getObjectDistance(object_coordinates_, new_object_coordinates) < 0.1)
                      {
                         object_coordinates_ = new_object_coordinates;
                         return true;
@@ -197,6 +236,22 @@ namespace robot{
 
          old_object_ = false;
          return false;
+      }
+
+      bool isOnAuctionList(Eigen::Vector2d& object)
+      {
+         ROS_DEBUG("%s: isOnAuctionList", robot_ns_.c_str());
+         for(int i = 0; i < auctioned_objects_.size(); i++)
+         {
+            if(getObjectDistance(object, auctioned_objects_[i]) < 0.1)
+               return true;
+         }
+         return false;
+      }
+
+      double getObjectDistance(Eigen::Vector2d& object1, Eigen::Vector2d& object2)
+      {
+         return (object1 - object2).squaredNorm();
       }
 
       Eigen::Vector2d getObjectWorldCoordinates(int index) 
@@ -240,7 +295,7 @@ namespace robot{
          bottom_scan_.updateLaserscan(msg);
       }
 
-      void communicationCallback(const multi_agent_messages::Communication::ConstPtr &msg)
+      void communicationCallback(const multi_agent_messages::Communication::Ptr &msg)
       {
          msg_handler_.addMessage(msg);
       }
