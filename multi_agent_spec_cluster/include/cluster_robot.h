@@ -45,13 +45,11 @@ namespace robot{
       LaserScan object_candidates_;
       ClusterMessageHandler msg_handler_;
 
-      enum class ClusteringState { Waiting, Goto, Clustering, Reversing, Turning, Stuck };
-      ClusteringState cluster_state_;
-      double turn_theta_;
+      enum class ClusteringState { Waiting, Goto, Clustering, Reversing, Stuck };
+      ClusteringState state_;
       Eigen::Vector2d object_coordinates_;
       Eigen::Vector2d dropoff_coordinates_;
-      bool old_object_;
-      bool init_;
+     
 
       Eigen::Vector2d unstuck_robot_coordinates_;
       ros::Time time_stuck_;
@@ -60,7 +58,7 @@ namespace robot{
       ClusterRobot(ros::NodeHandle* node_handle, std::string robot_namespace,  
          std::string odom_topic, std::string movement_topic, std::string top_scan_topic, 
          std::string bottom_scan_topic, std::string communication_topic)
-         : msg_handler_(robot_namespace)
+         : msg_handler_(robot_namespace, &navigation_)
       {
          ROS_DEBUG("ClusterRobot: Creating class instance and subscribing to topics.");
          this->nh_ = node_handle;
@@ -83,35 +81,30 @@ namespace robot{
          this->communication_pub_ = nh_->advertise<multi_agent_messages::Communication>(communication_topic, 100);
 
          robot_ns_ = robot_namespace;
-
-         cluster_state_ = ClusteringState::Waiting;
-         turn_theta_ = 0.0;
-
-         object_coordinates_ = Eigen::Vector2d::Zero();
-         old_object_ = false;
-         dropoff_coordinates_ = Eigen::Vector2d::Zero();
-
+         clusteringStateWaiting();
+         
          unstuck_robot_coordinates_ = Eigen::Vector2d::Zero();
          time_stuck_ = ros::Time::now();
-         init_ = true;
       }
 
       void run()
       {
-         geometry_msgs::Twist msg;
-         msg.linear.x = 0.0;
-         msg.angular.z = 0.0; 
-
-         //clustering(&msg);
-         ROS_DEBUG("%s: Robot linear vel = %.2f, angular vel = %.2f", 
-            robot_ns_.c_str(), msg.linear.x, msg.angular.z);
-
+         // Run the message handler
          msg_handler_.run();
          while(!msg_handler_.messageOutEmpty())
          {
             communication_pub_.publish(msg_handler_.getMessage());
          }
 
+         // Run clustering statemachine
+         geometry_msgs::Twist msg;
+         msg.linear.x = 0.0;
+         msg.angular.z = 0.0; 
+         clustering(&msg);
+         ROS_DEBUG("%s: Robot linear vel = %.2f, angular vel = %.2f", 
+            robot_ns_.c_str(), msg.linear.x, msg.angular.z);
+
+         // Publish movment
          this->movement_pub_.publish(msg);
       }
 
@@ -122,27 +115,71 @@ namespace robot{
       void clustering(geometry_msgs::Twist* msg)
       {
 
-         switch(cluster_state_)
+         switch(state_)
          {
             case ClusteringState::Waiting:
-               ROS_INFO("%s: ClusteringState::Waiting", robot_ns_.c_str());
+               if(msg_handler_.clusterQueueSize() > 0)
+               {
+                  clusteringStateGoto();
+               }
                break;
             case ClusteringState::Goto:
-               ROS_INFO("%s: ClusteringState::Goto", robot_ns_.c_str());
+               Goto::gotoAvoid(navigation_, top_scan_, msg, 
+                  object_coordinates_[0], object_coordinates_[1]);
+
+               if(navigation_.getDistanceToCoordinate(object_coordinates_) < 0.15)
+               {
+                  clusteringStateClustering();
+               }
                break;
             case ClusteringState::Clustering:
-               ROS_INFO("%s: ClusteringState::Clustering", robot_ns_.c_str());
+               if(clusterToPoint(msg, 0.0, 0.0))
+               {
+                  clusteringStateReversing();
+               }
                break;
             case ClusteringState::Reversing:
-               ROS_INFO("%s: ClusteringState::Reversing", robot_ns_.c_str());
-               break;
-            case ClusteringState::Turning:
-               ROS_INFO("%s: ClusteringState::Turning", robot_ns_.c_str());
+               msg->linear.x = -0.5;
+               msg->angular.z = 0.0;
+               if(navigation_.getDistanceToCoordinate(dropoff_coordinates_) > 1.5)
+               {
+                  msg_handler_.clusterQueuePop();
+                  msg_handler_.reportObjectClustered(object_coordinates_[0], object_coordinates_[1]);
+                  clusteringStateWaiting();
+               }
                break;
             case ClusteringState::Stuck:
-               ROS_INFO("%s: ClusteringState::Stuck", robot_ns_.c_str());
                break;
          }
+      }
+
+      void clusteringStateWaiting()
+      {
+         ROS_INFO("%s: ClusteringState::Waiting", robot_ns_.c_str());
+         object_coordinates_ = Eigen::Vector2d::Zero();
+         dropoff_coordinates_ = Eigen::Vector2d::Zero();
+         state_ = ClusteringState::Waiting;
+      }
+
+      void clusteringStateGoto()
+      {
+         ROS_INFO("%s: ClusteringState::Goto coordinates x=%.2f y=%.2f.", 
+            robot_ns_.c_str(), object_coordinates_[0], object_coordinates_[1]);
+         object_coordinates_ = msg_handler_.clusterQueueFront();
+         state_ = ClusteringState::Goto;
+      }
+
+      void clusteringStateClustering()
+      {
+         ROS_INFO("%s: ClusteringState::Clustering", robot_ns_.c_str());
+         state_ = ClusteringState::Clustering;
+      }
+
+      void clusteringStateReversing()
+      {
+         ROS_INFO("%s: ClusteringState::Reversing", robot_ns_.c_str());
+         dropoff_coordinates_ = navigation_.getCoordinates();
+         state_ = ClusteringState::Reversing;
       }
 
       bool checkStuck(int seconds)

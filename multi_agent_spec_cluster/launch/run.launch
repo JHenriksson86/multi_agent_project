@@ -1,8 +1,9 @@
 <launch>
 
   <arg name="scout_robot_model" default="$(find xacro)/xacro $(find turtlebot3_description)/urdf/turtlebot3_burger_scout.urdf.xacro"/>
-  <arg name="cluster_robot_model" default="$(find xacro)/xacro $(find turtlebot3_description)/urdf/turtlebot3_burger_gripper.urdf.xacro"/>
-  
+  <arg name="cluster_robot_model" default="$(find xacro)/xacro $(find turtlebot3_description)/urdf/turtlebot3_burger_gripper2.urdf.xacro"/>
+  <arg name="cluster_robots" default="1"/>
+
   <!-- Scout -->
   
   <arg name="scout"  default="scout"/>
@@ -28,11 +29,12 @@
       <param name="top_scan_topic" type="string" value="/$(arg scout)/top_scan" />
       <param name="bottom_scan_topic" type="string" value="/$(arg scout)/bottom_scan" />
       <param name="communication_topic" type="string" value="/communication" />
-      <param name="number_of_cluster_robots" type="int" value="1" />
+      <param name="number_of_cluster_robots" type="int" value="$(arg cluster_robots)" />
     </node>
   </group>
   
   <!-- Cluster Robot 1 -->
+
   <arg name="c1"  default="cluster1"/>
   <arg name="c1_x" default="-1.0"/>
   <arg name="c1_y" default="0.0"/>
@@ -58,5 +60,63 @@
       <param name="communication_topic" type="string" value="/communication" />
     </node>
   </group>
+
+  <?ignore 
+  <!-- Cluster Robot 2 -->
+  
+  <arg name="c2"  default="cluster2"/>
+  <arg name="c2_x" default="0.0"/>
+  <arg name="c2_y" default="1.0"/>
+  <arg name="c2_z" default="0.0"/>
+  <arg name="c2_yaw" default="0.0"/>
+
+  <group ns = "$(arg c2)">
+    <param name="robot_description" command="$(arg cluster_robot_model)"/>
+
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
+      <param name="publish_frequency" type="double" value="50.0" />
+      <param name="tf_prefix" value="$(arg c2)" />
+    </node>
+    
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" 
+	  args="-urdf -model $(arg c2) -x $(arg c2_x) -y $(arg c2_y) -z $(arg c2_z) -Y $(arg c2_yaw) -param robot_description" />
+    
+    <node name="cluster_robot_node" pkg="multi_agent_spec_cluster" type="cluster_robot_node" output="screen">
+      <param name="odometry_topic" type="string" value="/$(arg c2)/odom" />
+      <param name="movement_topic" type="string" value="/$(arg c2)/cmd_vel" />
+      <param name="top_scan_topic" type="string" value="/$(arg c2)/top_scan" />
+      <param name="bottom_scan_topic" type="string" value="/$(arg c2)/bottom_scan" />
+      <param name="communication_topic" type="string" value="/communication" />
+    </node>
+  </group>
+
+  <!-- Cluster Robot 3 -->
+  <arg name="c3"  default="cluster3"/>
+  <arg name="c3_x" default="0.0"/>
+  <arg name="c3_y" default="-1.0"/>
+  <arg name="c3_z" default="0.0"/>
+  <arg name="c3_yaw" default="0.0"/>
+
+  <group ns = "$(arg c3)">
+    <param name="robot_description" command="$(arg cluster_robot_model)"/>
+
+    <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" output="screen">
+      <param name="publish_frequency" type="double" value="50.0" />
+      <param name="tf_prefix" value="$(arg c3)" />
+    </node>
+    
+    <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" 
+	  args="-urdf -model $(arg c3) -x $(arg c3_x) -y $(arg c3_y) -z $(arg c3_z) -Y $(arg c3_yaw) -param robot_description" />
+    
+    <node name="cluster_robot_node" pkg="multi_agent_spec_cluster" type="cluster_robot_node" output="screen">
+      <param name="odometry_topic" type="string" value="/$(arg c3)/odom" />
+      <param name="movement_topic" type="string" value="/$(arg c3)/cmd_vel" />
+      <param name="top_scan_topic" type="string" value="/$(arg c3)/top_scan" />
+      <param name="bottom_scan_topic" type="string" value="/$(arg c3)/bottom_scan" />
+      <param name="communication_topic" type="string" value="/communication" />
+    </node>
+  </group>
+  
+  ?>
 
 </launch>

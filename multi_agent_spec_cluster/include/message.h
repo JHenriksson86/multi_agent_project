@@ -8,6 +8,8 @@
 
 #include "ros/ros.h"
 #include "multi_agent_messages/Communication.h"
+#include "eigen3/Eigen/Dense"
+#include "navigation.h"
 
 namespace robot
 {
@@ -176,6 +178,7 @@ namespace robot
         std::string best_bidder_;
         double object_x_;
         double object_y_;
+        std::queue<Eigen::Vector2d> clustered_objects_;
 
         public:
 
@@ -214,6 +217,12 @@ namespace robot
         }
 
         bool auctionFinished() const { return auction_state_ == AuctionState::Idle; }
+
+        int clusteredQueueSize() const { return clustered_objects_.size(); }
+
+        Eigen::Vector2d clusteredQueueFront() const { return clustered_objects_.front(); }
+
+        void clusteredQueuePop() { clustered_objects_.pop(); }
 
         void addMessage(const multi_agent_messages::Communication::Ptr &msg)
         {
@@ -282,11 +291,14 @@ namespace robot
                         std::string bid = "";
                         std::getline(ss, bid);
                         double new_bid = std::stod(bid);
+                        ROS_ERROR("%s: New bid %.2f from %s.", 
+                            robot_ns_.c_str(), new_bid, msg.sender.c_str());
                         confirm_counter_++;
                         if(best_bid_ < 0 || best_bid_ > new_bid)
                         {
                             best_bid_ = new_bid;
                             best_bidder_ = msg.sender;
+                            
                         }
                     }
                     break;
@@ -336,10 +348,14 @@ namespace robot
 
             if(action.compare("finished") == 0)
             {
-                std::string x = "", y = "";
-                std::getline(ss, x, ' ');
-                std::getline(ss, y);
-                ROS_INFO("%s: Finished cluster message x = %s, y = %s.", robot_ns_.c_str(), x.c_str(), y.c_str());
+                std::string str_x = "", str_y = "";
+                std::getline(ss, str_x, ' ');
+                std::getline(ss, str_y);
+                double x = std::stod(str_x);
+                double y = std::stod(str_y);
+                clustered_objects_.push(Eigen::Vector2d(x,y));
+                
+                ROS_INFO("%s: Finished cluster message x = %.2f, y = %.2f.", robot_ns_.c_str(), x, y);
                 msg_out_.push(Message::message(robot_ns_, msg.sender, MessageType::Cluster, "confirm"));
             }
             else
@@ -510,27 +526,19 @@ namespace robot
     class ClusterMessageHandler : public MessageHandler
     {
         private:
-        double robot_x_;
-        double robot_y_;
-        int robot_queue_size_;
-
-        double object_x_;
-        double object_y_;
-
+        std::queue<Eigen::Vector2d>     cluster_queue_;
+        Eigen::Vector2d                 auction_object_;
+        Navigation*                     navigation_;
+        
         public:
-
-        ClusterMessageHandler(std::string robot_namespace)
+        ClusterMessageHandler(std::string robot_namespace, Navigation* navigation)
         : MessageHandler(robot_namespace)
         {
-            this->robot_x_ = 0.0;
-            this->robot_y_ = 0.0;
-            this->robot_queue_size_ = 0;
-
-            this->object_x_ = 0.0;
-            this->object_y_ = 0.0;
+            this->navigation_ = navigation;
+            this->auction_object_ = Eigen::Vector2d::Zero();
         }
 
-        bool objectClustered(double x, double y)
+        bool reportObjectClustered(double x, double y)
         {
             if(cluster_state_ != ClusterState::Idle)
             {
@@ -548,6 +556,15 @@ namespace robot
             clusterStateWaiting();
             return true;
         }
+
+        int clusterQueueSize() const { return cluster_queue_.size(); }
+
+        Eigen::Vector2d clusterQueueFront()
+        {
+            return cluster_queue_.front();
+        }
+
+        void clusterQueuePop() { cluster_queue_.pop(); }
 
         void addMessage(const multi_agent_messages::Communication::Ptr &msg)
         {
@@ -616,8 +633,9 @@ namespace robot
                         std::string str_x = "", str_y = "";
                         std::getline(ss, str_x, ' ');
                         std::getline(ss, str_y);
-                        object_x_ = std::stod(str_x);
-                        object_y_ = std::stod(str_y);
+                        auction_object_[0] = std::stod(str_x);
+                        auction_object_[1] = std::stod(str_y);
+                        
                         auctionStateBidding();
                     }
                     break;
@@ -629,6 +647,7 @@ namespace robot
                         if(winner.compare(robot_ns_) == 0)
                         {
                             ROS_INFO("%s: I won the auction!.", robot_ns_.c_str());
+                            cluster_queue_.push(auction_object_);
                         }
                         else
                         {
@@ -744,7 +763,7 @@ namespace robot
 
         double makeBid()
         {
-            return std::sqrt(std::pow(object_x_, 2) + std::pow(object_y_, 2)) + (double)robot_queue_size_ * 10.0;
+            return navigation_->getDistanceToCoordinate(auction_object_) + (double)cluster_queue_.size() * 10.0;
         }
 
         void auctionStateIdle()

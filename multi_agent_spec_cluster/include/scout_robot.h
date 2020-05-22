@@ -20,6 +20,7 @@
 #include "navigation.h"
 #include "fuzzy.h"
 #include "laser_scan.h"
+#include "object_tracking.h"
 #include "multi_agent_messages/Communication.h"
 #include "message.h"
 
@@ -44,6 +45,7 @@ namespace robot{
       LaserScan object_candidates_;
       RandomWalk random_walk_;
       ScoutMessageHandler msg_handler_;
+      ObjectTracking tracking_;
 
       enum class ScoutState { Starting, Searching, Auction, Bidding};
       ScoutState state_;
@@ -67,7 +69,8 @@ namespace robot{
          std::string bottom_scan_topic, std::string communication_topic,
          int number_of_cluster_robots)
          : random_walk_(&navigation_, &bottom_scan_), 
-         msg_handler_(robot_namespace, number_of_cluster_robots)
+         msg_handler_(robot_namespace, number_of_cluster_robots),
+         tracking_(&navigation_)
       {
          ROS_DEBUG("ScoutRobot: Creating class instance and subscribing to topics.");
          this->nh_ = node_handle;
@@ -92,6 +95,7 @@ namespace robot{
 
          robot_ns_ = robot_namespace;
          scoutStateStarting();
+         tracking_.setClusterPoint(Eigen::Vector2d::Zero());
          
          object_coordinates_ = Eigen::Vector2d::Zero();
          old_object_ = false;
@@ -99,21 +103,23 @@ namespace robot{
 
       void run()
       {
-         geometry_msgs::Twist msg;
-         msg.linear.x = 0.0;
-         msg.angular.z = 0.0; 
-
-         clustering(&msg);
-
-         ROS_DEBUG("%s: Robot linear vel = %.2f, angular vel = %.2f", 
-            robot_ns_.c_str(), msg.linear.x, msg.angular.z);
-
+         // Run the message handler
          msg_handler_.run();
          while(!msg_handler_.messageOutEmpty())
          {
             communication_pub_.publish(msg_handler_.getMessage());
          }
+         handleClusteredQueue();
 
+         // Run clustering statemachine
+         geometry_msgs::Twist msg;
+         msg.linear.x = 0.0;
+         msg.angular.z = 0.0; 
+         clustering(&msg);
+         ROS_DEBUG("%s: Robot linear vel = %.2f, angular vel = %.2f", 
+            robot_ns_.c_str(), msg.linear.x, msg.angular.z);
+
+         // Publish movment
          this->movement_pub_.publish(msg);
       }
 
@@ -123,8 +129,6 @@ namespace robot{
 
       void clustering(geometry_msgs::Twist* msg)
       {
-         bool found_object = findClosestObject();
-         
          switch(state_)
          {
             case ScoutState::Starting:
@@ -134,14 +138,18 @@ namespace robot{
                   scoutStateSearching();
                break;
             case ScoutState::Searching:
-               if(!found_object)
+               random_walk_.run(msg);
+               if(random_walk_.getState() == RandomWalkState::forward)
                {
-                  random_walk_.run(msg);
+                  tracking_.update(object_candidates_);
+                  if(tracking_.foundObject())
+                  {
+                     tracking_.printObjects();
+                     object_coordinates_ = tracking_.getBestObject();
+                     scoutStateAuction(object_coordinates_[0], object_coordinates_[1]);
+                  }
                }
-               else
-               {
-                  scoutStateAuction(object_coordinates_[0], object_coordinates_[1]);
-               }
+               
                break;
             case ScoutState::Auction:
                if(msg_handler_.initAuction(object_coordinates_[0], object_coordinates_[1]))
@@ -152,9 +160,7 @@ namespace robot{
             case ScoutState::Bidding:
                if(msg_handler_.auctionFinished())
                {
-                  auctioned_objects_.push_back(
-                     Eigen::Vector2d(object_coordinates_[0], object_coordinates_[1])
-                  );
+                  tracking_.addAuctionedObject(object_coordinates_);
                   scoutStateSearching();
                }
                break;
@@ -186,77 +192,20 @@ namespace robot{
          state_ = ScoutState::Bidding;
       }
 
-      bool findClosestObject()
+      void handleClusteredQueue()
       {
-         ROS_DEBUG("%s: findClosestObject", robot_ns_.c_str());
-         if(object_candidates_.empty())
-            return false;
-         
-         double distance = 1.0;
-         int closest_object = -1;
-
-         for(int i = 0; i < object_candidates_.size(); i++)
+         while(msg_handler_.clusteredQueueSize() > 0)
          {
-            LaserScanPoint candidate(object_candidates_[i]);
-            int close_objects = 0;
-            for(int j = 0; j < object_candidates_.size(); j++)
+            if(tracking_.removeAuctionedObject(msg_handler_.clusteredQueueFront()))
             {
-               if(i != j)
-               {
-                  if(candidate.getDistance(object_candidates_[j]) < 0.2)
-                     close_objects++;
-               }
+               ROS_INFO("%s: handleClusteredQueue() successfully removed auctioned object", robot_ns_.c_str());
             }
-            if(close_objects > 2)
+            else
             {
-               Eigen::Vector2d new_object_coordinates = getObjectWorldCoordinates(i);
-               if(candidate.getDistance() < distance && !isOnAuctionList(new_object_coordinates))
-               {
-                  distance = candidate.getDistance();
-                  closest_object = i;
-                  
-                  if(old_object_)
-                  {
-                     if(getObjectDistance(object_coordinates_, new_object_coordinates) < 0.1)
-                     {
-                        object_coordinates_ = new_object_coordinates;
-                        return true;
-                     }
-                  }
-               }
+               ROS_WARN("%s: handleClusteredQueue() failed to remove auctioned object", robot_ns_.c_str());
             }
+            msg_handler_.clusteredQueuePop();
          }
-
-         if(closest_object != -1)
-         {
-            object_coordinates_ = getObjectWorldCoordinates(closest_object);
-            old_object_ = true;
-            return true;
-         }
-
-         old_object_ = false;
-         return false;
-      }
-
-      bool isOnAuctionList(Eigen::Vector2d& object)
-      {
-         ROS_DEBUG("%s: isOnAuctionList", robot_ns_.c_str());
-         for(int i = 0; i < auctioned_objects_.size(); i++)
-         {
-            if(getObjectDistance(object, auctioned_objects_[i]) < 0.1)
-               return true;
-         }
-         return false;
-      }
-
-      double getObjectDistance(Eigen::Vector2d& object1, Eigen::Vector2d& object2)
-      {
-         return (object1 - object2).squaredNorm();
-      }
-
-      Eigen::Vector2d getObjectWorldCoordinates(int index) 
-      {
-         return navigation_.convertToWorldCoordinate(object_candidates_[index].getCartesianCoordinates());
       }
 
       void odomCallback(const nav_msgs::Odometry::ConstPtr& msg) 

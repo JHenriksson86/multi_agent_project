@@ -9,4 +9,10 @@
     <arg name="debug" value="false"/>
   </include>  
 
+  <node name="tf"
+        pkg="tf"
+        type="static_transform_publisher"
+        args="0.0 0.0 0.0 0.0 0.0 0.0 1.0 world /scan 100"
+  />
+
 </launch>

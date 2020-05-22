@@ -192,11 +192,11 @@ struct Goto
    }
 };
 
+enum class RandomWalkState { forward, turning };
+
 class RandomWalk
 {
    private:
-
-   enum class RandomWalkState { forward, turning };
    double random_turn_;
    RandomWalkState state_;
    Navigation* navigation_;
@@ -211,6 +211,8 @@ class RandomWalk
       this->random_turn_ = 0.0;
       this->state_ = RandomWalkState::forward;
    }
+
+   const RandomWalkState& getState() const { return state_; }
 
    void run(geometry_msgs::Twist* msg)
    {
