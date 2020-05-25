@@ -45,12 +45,11 @@ namespace robot{
       LaserScan object_candidates_;
       ClusterMessageHandler msg_handler_;
 
-      enum class ClusteringState { Waiting, Goto, Clustering, Reversing, Stuck };
+      enum class ClusteringState { Waiting, GotoWaypoint, GotoObject, Clustering, Reversing, Stuck };
       ClusteringState state_;
       Eigen::Vector2d object_coordinates_;
+      Eigen::Vector2d waypoint_coordinates_;
       Eigen::Vector2d dropoff_coordinates_;
-     
-
       Eigen::Vector2d unstuck_robot_coordinates_;
       ros::Time time_stuck_;
       
@@ -114,34 +113,47 @@ namespace robot{
 
       void clustering(geometry_msgs::Twist* msg)
       {
-
          switch(state_)
          {
             case ClusteringState::Waiting:
                if(msg_handler_.clusterQueueSize() > 0)
                {
-                  clusteringStateGoto();
+                  clusteringStateGotoWaypoint();
                }
                break;
-            case ClusteringState::Goto:
+            case ClusteringState::GotoWaypoint:
+               
+               Goto::gotoAvoid(navigation_, top_scan_, msg, 
+                  waypoint_coordinates_[0], waypoint_coordinates_[1]);
+
+               if(navigation_.getDistanceToCoordinate(waypoint_coordinates_) < 0.15)
+               {
+                  clusteringStateClustering();
+               }
+               else if(checkStuck(5.0))
+               {
+                  clusteringStateGotoObject();
+               }
+               break;
+            case ClusteringState::GotoObject:
+               
                Goto::gotoAvoid(navigation_, top_scan_, msg, 
                   object_coordinates_[0], object_coordinates_[1]);
 
-               if(navigation_.getDistanceToCoordinate(object_coordinates_) < 0.15)
+               if(navigation_.getDistanceToCoordinate(object_coordinates_) < 0.15 || checkStuck(5.0))
                {
                   clusteringStateClustering();
                }
                break;
             case ClusteringState::Clustering:
-               if(clusterToPoint(msg, 0.0, 0.0))
+               if(clusterToPoint(msg, 0.0, 0.0) || checkStuck(5.0))
                {
                   clusteringStateReversing();
                }
                break;
             case ClusteringState::Reversing:
-               msg->linear.x = -0.5;
-               msg->angular.z = 0.0;
-               if(navigation_.getDistanceToCoordinate(dropoff_coordinates_) > 1.5)
+               if(Goto::reverseAvoid(navigation_, top_scan_, msg, dropoff_coordinates_, 1.5) < 0.1 
+                  || checkStuck(5.0))
                {
                   msg_handler_.clusterQueuePop();
                   msg_handler_.reportObjectClustered(object_coordinates_[0], object_coordinates_[1]);
@@ -158,20 +170,33 @@ namespace robot{
          ROS_INFO("%s: ClusteringState::Waiting", robot_ns_.c_str());
          object_coordinates_ = Eigen::Vector2d::Zero();
          dropoff_coordinates_ = Eigen::Vector2d::Zero();
+         clearStuck();
          state_ = ClusteringState::Waiting;
       }
 
-      void clusteringStateGoto()
+      void clusteringStateGotoWaypoint()
       {
-         ROS_INFO("%s: ClusteringState::Goto coordinates x=%.2f y=%.2f.", 
-            robot_ns_.c_str(), object_coordinates_[0], object_coordinates_[1]);
          object_coordinates_ = msg_handler_.clusterQueueFront();
-         state_ = ClusteringState::Goto;
+         waypoint_coordinates_ = getClusterWaypoint(object_coordinates_, 0.5);
+         ROS_INFO("%s: ClusteringState::GotoWaypoint coordinates x=%.2f y=%.2f.", 
+            robot_ns_.c_str(), waypoint_coordinates_[0], waypoint_coordinates_[1]);
+         clearStuck();
+         state_ = ClusteringState::GotoWaypoint;
+      }
+
+      void clusteringStateGotoObject()
+      {
+         object_coordinates_ = msg_handler_.clusterQueueFront();
+         ROS_INFO("%s: ClusteringState::GotoObject coordinates x=%.2f y=%.2f.", 
+            robot_ns_.c_str(), object_coordinates_[0], object_coordinates_[1]);
+         clearStuck();
+         state_ = ClusteringState::GotoObject;
       }
 
       void clusteringStateClustering()
       {
          ROS_INFO("%s: ClusteringState::Clustering", robot_ns_.c_str());
+         clearStuck();
          state_ = ClusteringState::Clustering;
       }
 
@@ -179,6 +204,7 @@ namespace robot{
       {
          ROS_INFO("%s: ClusteringState::Reversing", robot_ns_.c_str());
          dropoff_coordinates_ = navigation_.getCoordinates();
+         clearStuck();
          state_ = ClusteringState::Reversing;
       }
 
@@ -195,11 +221,17 @@ namespace robot{
          }
          if(time_stuck > seconds)
          {
-            ROS_WARN("Stuck: Time stuck = %d, Distance %.2f", time_stuck, distance);
+            ROS_WARN("%s: Stuck: Time stuck = %d, Distance %.2f", robot_ns_.c_str(), time_stuck, distance);
             return true;
          }
 
          return false;
+      }
+
+      void clearStuck()
+      {
+         unstuck_robot_coordinates_ = navigation_.getCoordinates();
+         time_stuck_ = ros::Time::now();
       }
 
       bool clusterToPoint(geometry_msgs::Twist* msg, double x, double y)
@@ -210,6 +242,16 @@ namespace robot{
             return true;
 
          return false;
+      }
+
+      Eigen::Vector2d getClusterWaypoint(const Eigen::Vector2d& object_coordinates, double distance) const
+      {
+         double angle = std::atan2(object_coordinates[1], object_coordinates[0]);
+         double x = distance * std::cos(angle);
+         double y = distance * std::sin(angle);
+         ROS_DEBUG("%s: getClusterWaypoint() Waypoint x=%.2f y=%.2f", 
+            robot_ns_.c_str(), object_coordinates[0] + x, object_coordinates[1] + y);
+         return Eigen::Vector2d(object_coordinates[0] + x,object_coordinates[1] + y);
       }
 
       Eigen::Vector2d getObjectWorldCoordinates(int index) 

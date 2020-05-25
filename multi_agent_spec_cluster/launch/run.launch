@@ -2,7 +2,7 @@
 
   <arg name="scout_robot_model" default="$(find xacro)/xacro $(find turtlebot3_description)/urdf/turtlebot3_burger_scout.urdf.xacro"/>
   <arg name="cluster_robot_model" default="$(find xacro)/xacro $(find turtlebot3_description)/urdf/turtlebot3_burger_gripper2.urdf.xacro"/>
-  <arg name="cluster_robots" default="1"/>
+  <arg name="cluster_robots" default="2"/>
 
   <!-- Scout -->
   
@@ -61,7 +61,7 @@
     </node>
   </group>
 
-  <?ignore 
+
   <!-- Cluster Robot 2 -->
   
   <arg name="c2"  default="cluster2"/>
@@ -90,6 +90,7 @@
     </node>
   </group>
 
+  <?ignore  
   <!-- Cluster Robot 3 -->
   <arg name="c3"  default="cluster3"/>
   <arg name="c3_x" default="0.0"/>

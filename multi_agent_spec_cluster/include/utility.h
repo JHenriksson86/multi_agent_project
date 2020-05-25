@@ -99,6 +99,16 @@ struct Avoidance
       );
    }
 
+   static double obstacleBehind(const LaserScan& scan, 
+      double slowdown_threshold, double stop_threshold)
+   {
+      return FuzzyFunctions::rampUp(
+         scan.regionDistance(degreesToRadians(120.0), degreesToRadians(230.0)),
+         slowdown_threshold, 
+         stop_threshold
+      );
+   }
+
    static double obstacle(const LaserScan& scan, 
       double slowdown_threshold, double stop_threshold)
    {
@@ -124,8 +134,8 @@ struct Goto
          nav.getAngleToCoordinate(x, y)
       );
 
-      const double frontside_start = 1.2;
-      const double frontside_full = 0.4;
+      const double frontside_start = 0.5;
+      const double frontside_full = 0.2;
       const double side_start = 0.4;
       const double side_full = 0.1;
       const double linear_start = 1.2;
@@ -165,8 +175,22 @@ struct Goto
       {
          msg->angular.z += FuzzyFunctions::OR(obstacle_front_right, obstacle_right);
       }
-
    }
+
+   static double reverseAvoid(const Navigation& nav, const LaserScan& scan, 
+      geometry_msgs::Twist* msg, Eigen::Vector2d coordinates, double goal_distance)
+   {
+      double distance = goal_distance - nav.getDistanceToCoordinate(coordinates);
+
+      msg->linear.x = -0.5 * FuzzyFunctions::AND(
+         FuzzyFunctions::NOT(Avoidance::obstacleBehind(scan, 1.5, 0.3)),
+         FuzzyFunctions::NOT(positionHere(distance, 0.5, 0.0))
+      );
+      msg->angular.z = 0.0;
+
+      return distance;
+   }
+
 
    static double positionLeft(double angle, double slowdown_threshold, double stop_threshold)
    {

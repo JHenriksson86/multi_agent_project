@@ -256,15 +256,15 @@ namespace robot
                 switch(Message::getMessageType(msg))
                 {
                     case MessageType::Auction:
-                        ROS_INFO("%s: Auction message received.", robot_ns_.c_str());
+                        ROS_DEBUG("%s: Auction message received.", robot_ns_.c_str());
                         readAuctionMessage(msg);
                         break;
                     case MessageType::Start:
-                        ROS_INFO("%s: Start message received.", robot_ns_.c_str());
+                        ROS_DEBUG("%s: Start message received.", robot_ns_.c_str());
                         readStartMessage(msg);
                         break;
                     case MessageType::Cluster:
-                        ROS_INFO("%s: Cluster message received.", robot_ns_.c_str());
+                        ROS_DEBUG("%s: Cluster message received.", robot_ns_.c_str());
                         readClusterMessage(msg);
                         break;
                     case MessageType::Unknown:
@@ -351,8 +351,8 @@ namespace robot
                 std::string str_x = "", str_y = "";
                 std::getline(ss, str_x, ' ');
                 std::getline(ss, str_y);
-                double x = std::stod(str_x);
                 double y = std::stod(str_y);
+                double x = std::stod(str_x);
                 clustered_objects_.push(Eigen::Vector2d(x,y));
                 
                 ROS_INFO("%s: Finished cluster message x = %.2f, y = %.2f.", robot_ns_.c_str(), x, y);
@@ -598,15 +598,15 @@ namespace robot
                 switch(Message::getMessageType(msg))
                 {
                     case MessageType::Auction:
-                        ROS_INFO("%s: Auction message received.", robot_ns_.c_str());
+                        ROS_DEBUG("%s: Auction message received.", robot_ns_.c_str());
                         readAuctionMessage(msg);
                         break;
                     case MessageType::Start:
-                        ROS_INFO("%s: Start message received.", robot_ns_.c_str());
+                        ROS_DEBUG("%s: Start message received.", robot_ns_.c_str());
                         readStartMessage(msg);
                         break;
                     case MessageType::Cluster:
-                        ROS_INFO("%s: Cluster message received.", robot_ns_.c_str());
+                        ROS_DEBUG("%s: Cluster message received.", robot_ns_.c_str());
                         readClusterMessage(msg);
                         break;
                     case MessageType::Unknown:
@@ -763,7 +763,7 @@ namespace robot
 
         double makeBid()
         {
-            return navigation_->getDistanceToCoordinate(auction_object_) + (double)cluster_queue_.size() * 10.0;
+            return navigation_->getDistanceToCoordinate(auction_object_) + (double)cluster_queue_.size() * 5.0;
         }
 
         void auctionStateIdle()

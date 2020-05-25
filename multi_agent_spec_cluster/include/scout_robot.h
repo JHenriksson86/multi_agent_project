@@ -144,7 +144,7 @@ namespace robot{
                   tracking_.update(object_candidates_);
                   if(tracking_.foundObject())
                   {
-                     tracking_.printObjects();
+                     //tracking_.printObjects();
                      object_coordinates_ = tracking_.getBestObject();
                      scoutStateAuction(object_coordinates_[0], object_coordinates_[1]);
                   }
@@ -198,7 +198,7 @@ namespace robot{
          {
             if(tracking_.removeAuctionedObject(msg_handler_.clusteredQueueFront()))
             {
-               ROS_INFO("%s: handleClusteredQueue() successfully removed auctioned object", robot_ns_.c_str());
+               ROS_DEBUG("%s: handleClusteredQueue() successfully removed auctioned object", robot_ns_.c_str());
             }
             else
             {
