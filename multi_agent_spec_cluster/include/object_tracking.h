@@ -81,7 +81,7 @@ namespace robot
 
       public:
 
-      ObjectTracking(Navigation* navigation, double distance_limit = 1.0, double probability_limit = 0.9)
+      ObjectTracking(Navigation* navigation, double distance_limit = 1.0, double probability_limit = 0.99)
       {
          this->navigation_ = navigation;
          this->distance_limit_ = distance_limit;
@@ -283,7 +283,6 @@ namespace robot
             {
                return false;
             }
-            
          }
          else
          {

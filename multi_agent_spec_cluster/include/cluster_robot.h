@@ -152,8 +152,7 @@ namespace robot{
                }
                break;
             case ClusteringState::Reversing:
-               if(Goto::reverseAvoid(navigation_, top_scan_, msg, dropoff_coordinates_, 1.5) < 0.1 
-                  || checkStuck(5.0))
+               if(Goto::reverseAvoid(navigation_, top_scan_, msg, dropoff_coordinates_, 1.5) < 0.1)
                {
                   msg_handler_.clusterQueuePop();
                   msg_handler_.reportObjectClustered(object_coordinates_[0], object_coordinates_[1]);

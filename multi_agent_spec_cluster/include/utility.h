@@ -109,6 +109,26 @@ struct Avoidance
       );
    }
 
+   static double obstacleBehindRight(const LaserScan& scan, 
+      double slowdown_threshold, double stop_threshold)
+   {
+      return FuzzyFunctions::rampUp(
+         scan.regionDistance(degreesToRadians(180.0), degreesToRadians(315.0)),
+         slowdown_threshold, 
+         stop_threshold
+      );
+   }
+
+   static double obstacleBehindLeft(const LaserScan& scan, 
+      double slowdown_threshold, double stop_threshold)
+   {
+      return FuzzyFunctions::rampUp(
+         scan.regionDistance(degreesToRadians(45.0), degreesToRadians(180.0)),
+         slowdown_threshold, 
+         stop_threshold
+      );
+   }
+
    static double obstacle(const LaserScan& scan, 
       double slowdown_threshold, double stop_threshold)
    {
@@ -186,8 +206,22 @@ struct Goto
          FuzzyFunctions::NOT(Avoidance::obstacleBehind(scan, 1.5, 0.3)),
          FuzzyFunctions::NOT(positionHere(distance, 0.5, 0.0))
       );
-      msg->angular.z = 0.0;
 
+      msg->angular.z = 0.0;
+      double obs_left = Avoidance::obstacleBehindLeft(scan, 0.7, 0.3);
+      double obs_right = Avoidance::obstacleBehindRight(scan, 0.7, 0.3);
+
+      if (obs_left > obs_right)
+      {
+         msg->angular.z += obs_left;
+      }
+      else
+      {
+         msg->angular.z -= obs_right;
+      }
+
+      ROS_DEBUG("reverseAvoid(): linear=%.2f, angular=%.2f, distance=%.2f, obs_left=%.2f, obs_right=%.2f",
+         msg->linear.x, msg->angular.z, distance, obs_left, obs_right);
       return distance;
    }
 

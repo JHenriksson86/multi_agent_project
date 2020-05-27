@@ -142,9 +142,9 @@ namespace robot{
                if(random_walk_.getState() == RandomWalkState::forward)
                {
                   tracking_.update(object_candidates_);
+                  //tracking_.printObjects();
                   if(tracking_.foundObject())
                   {
-                     //tracking_.printObjects();
                      object_coordinates_ = tracking_.getBestObject();
                      scoutStateAuction(object_coordinates_[0], object_coordinates_[1]);
                   }
