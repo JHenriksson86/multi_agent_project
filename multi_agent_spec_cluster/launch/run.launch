@@ -90,7 +90,8 @@
     </node>
   </group>
 
-  <?ignore  
+  <?ignore 
+
   <!-- Cluster Robot 3 -->
   <arg name="c3"  default="cluster3"/>
   <arg name="c3_x" default="0.0"/>
@@ -117,7 +118,7 @@
       <param name="communication_topic" type="string" value="/communication" />
     </node>
   </group>
-  
+   
   ?>
 
 </launch>
